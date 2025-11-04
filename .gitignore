@@ -1,0 +1,68 @@
+# IronCore .gitignore
+
+# Build artifacts
+build/
+obj_dir/
+waves/
+
+# Simulation outputs
+*.fst
+*.vcd
+*.log
+*.jou
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+.eggs/
+sim_build/
+
+# Verilator
+*.verilator
+*.d
+
+# Synthesis
+*.bit
+*.bin
+*.runs/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.xpr
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+*.ucdb
+
+# Temporary
+*.tmp
+*.bak
+*.dump
+logs/
+
+# Debug files (large)
+debug_*.log
+debug_*.dump
+
+# IronCore Specific
+coverage_cocotb.dat
+.pytest_cache/
+__pycache__/
+sim_build/
+waves/
+*.vcd
+*.fst

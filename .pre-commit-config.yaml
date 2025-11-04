@@ -1,0 +1,46 @@
+# IronCore Pre-commit Hooks
+# See https://pre-commit.com for more information
+
+repos:
+  # Verible SystemVerilog formatter
+  - repo: local
+    hooks:
+      - id: verible-format
+        name: Verible Format
+        entry: verible-verilog-format --inplace
+        language: system
+        files: \.(sv|v)$
+        types: [file]
+
+  # Verible SystemVerilog linter
+  - repo: local
+    hooks:
+      - id: verible-lint
+        name: Verible Lint
+        entry: verible-verilog-lint
+        language: system
+        files: \.(sv|v)$
+        types: [file]
+        args: [-rules=-line-length]
+
+  # Python formatting with Ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Whitespace hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.(fst|vcd)$
+      - id: end-of-file-fixer
+        exclude: \.(fst|vcd)$
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: mixed-line-ending
+        args: ['--fix=lf']

@@ -1,0 +1,17 @@
+# IronCore Python Dependencies
+# Pinned for reproducibility
+
+# Verification framework
+cocotb==1.9.0
+cocotb-bus==0.2.1
+cocotb-test==0.2.5
+pytest==8.3.3
+pytest-xdist==3.5.0
+
+# Code quality
+ruff==0.6.9
+pre-commit==3.8.0
+
+# Utilities
+pyyaml==6.0.2
+junitparser==3.2.0
