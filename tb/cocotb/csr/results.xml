@@ -1,0 +1,11 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1768761953" />
+    <testcase name="test_csr_init" classname="test_csr" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/csr/test_csr.py" lineno="49" time="0.0005192756652832031" sim_time_ns="15.001" ratio_time="28888.316943985308" />
+    <testcase name="test_csr_mstatus_mask" classname="test_csr" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/csr/test_csr.py" lineno="63" time="0.00039124488830566406" sim_time_ns="41.001000000000005" ratio_time="104796.25734552104" />
+    <testcase name="test_csr_mtvec_mode" classname="test_csr" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/csr/test_csr.py" lineno="79" time="0.0003311634063720703" sim_time_ns="41.001" ratio_time="123808.96926133908" />
+    <testcase name="test_csr_mret_logic" classname="test_csr" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/csr/test_csr.py" lineno="97" time="0.0006349086761474609" sim_time_ns="51.00099999999999" ratio_time="80328.08798497933" />
+    <testcase name="test_perf_counters" classname="test_csr" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/csr/test_csr.py" lineno="130" time="0.0005948543548583984" sim_time_ns="122.001" ratio_time="205093.9007230461" />
+    <testcase name="test_csr_bit_ops" classname="test_csr" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/csr/test_csr.py" lineno="144" time="0.0004267692565917969" sim_time_ns="51.000999999999976" ratio_time="119504.85938770944" />
+  </testsuite>
+</testsuites>

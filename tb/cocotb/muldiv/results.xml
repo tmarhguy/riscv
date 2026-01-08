@@ -1,0 +1,10 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1768761633" />
+    <testcase name="test_muldiv_basic" classname="test_muldiv" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/muldiv/test_muldiv.py" lineno="51" time="0.002892732620239258" sim_time_ns="400.001" ratio_time="138277.9027696365" />
+    <testcase name="test_muldiv_divide_by_zero" classname="test_muldiv" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/muldiv/test_muldiv.py" lineno="65" time="0.005064964294433594" sim_time_ns="1040.001" ratio_time="205332.3458060629" />
+    <testcase name="test_muldiv_overflow" classname="test_muldiv" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/muldiv/test_muldiv.py" lineno="83" time="0.003283977508544922" sim_time_ns="700.0010000000002" ratio_time="213156.45377551916" />
+    <testcase name="test_muldiv_mixed_signs" classname="test_muldiv" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/muldiv/test_muldiv.py" lineno="99" time="0.0048749446868896484" sim_time_ns="1040.0009999999997" ratio_time="213335.95903086022" />
+    <testcase name="test_muldiv_random" classname="test_muldiv" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/muldiv/test_muldiv.py" lineno="120" time="0.08484101295471191" sim_time_ns="19020.001" ratio_time="224184.0395063749" />
+  </testsuite>
+</testsuites>

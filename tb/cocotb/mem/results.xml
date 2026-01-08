@@ -1,0 +1,8 @@
+<testsuites name="results">
+  <testsuite name="all" package="all">
+    <property name="random_seed" value="1768761865" />
+    <testcase name="test_mem_aligned_rw" classname="test_mem" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/mem/test_mem.py" lineno="59" time="0.0009050369262695312" sim_time_ns="90.001" ratio_time="99444.56119704954" />
+    <testcase name="test_mem_misaligned_trap" classname="test_mem" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/mem/test_mem.py" lineno="99" time="0.0004069805145263672" sim_time_ns="50.001000000000005" ratio_time="122858.46180667839" />
+    <testcase name="test_mem_backpressure" classname="test_mem" file="/Users/tmarhguy/riscv/riscv/tb/cocotb/mem/test_mem.py" lineno="117" time="0.0006690025329589844" sim_time_ns="101.00099999999998" ratio_time="150972.52256022804" />
+  </testsuite>
+</testsuites>

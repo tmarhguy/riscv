@@ -1,0 +1,133 @@
+# RV64 Compliance Test Runner
+# Runs rv64ui and rv64um tests against IronCore RV64IM
+
+# Toolchain
+RISCV_PREFIX ?= riscv64-unknown-elf-
+OBJCOPY = $(RISCV_PREFIX)objcopy
+
+# Test Locations
+RISCV_TESTS_DIR = ../riscv-tests/isa
+
+BUILD_DIR = build
+SIM = ../../build/obj_dir/ironcore_sim
+
+# RV64UI test list (all 55 tests)
+RV64UI_TESTS = \
+	add addi addiw addw \
+	and andi auipc \
+	beq bge bgeu blt bltu bne \
+	fence_i \
+	jal jalr \
+	lb lbu ld lh lhu lw lwu \
+	lui \
+	ma_data \
+	or ori \
+	sb sd sh simple sll slli slliw sllw \
+	slt slti sltiu sltu \
+	sra srai sraiw sraw \
+	srl srli srliw srlw \
+	st_ld ld_st \
+	sub subw sw \
+	xor xori
+
+# RV64UM test list
+RV64UM_TESTS = \
+	mul mulh mulhsu mulhu \
+	div divu rem remu \
+	mulw divw divuw remw remuw
+
+# RV64MI test list
+RV64MI_TESTS = \
+	access breakpoint csr \
+	illegal mcsr scall \
+	zicntr zifencei
+
+.PHONY: all run clean rv64ui rv64um
+
+all: run
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
+
+# Run all RV64 tests
+run: rv64ui rv64um rv64mi
+	@mkdir -p logs
+	@echo "=== RV64 Compliance Test Summary ==="
+	@echo "RV64UI: $$(grep -c PASS $(BUILD_DIR)/rv64ui-*.log 2>/dev/null || echo 0) passed"
+	@echo "RV64UM: $$(grep -c PASS $(BUILD_DIR)/rv64um-*.log 2>/dev/null || echo 0) passed"
+	@echo "RV64MI: $$(grep -c PASS $(BUILD_DIR)/rv64mi-*.log 2>/dev/null || echo 0) passed"
+
+# RV64UI tests
+rv64ui: $(BUILD_DIR)
+	@echo "Running RV64UI tests from $(RISCV_TESTS_DIR)..."
+	@passed=0; failed=0; skipped=0; \
+	for test in $(RV64UI_TESTS); do \
+		TEST_SRC=$(RISCV_TESTS_DIR)/rv64ui-p-$$test; \
+		if [ -f $$TEST_SRC ]; then \
+			echo -n "  $$test: "; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64ui-p-$$test.bin 2>/dev/null; \
+			if $(SIM) $(BUILD_DIR)/rv64ui-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv64ui-p-$$test.log 2>&1; then \
+				echo "PASS"; \
+				passed=$$((passed + 1)); \
+			else \
+				echo "FAIL"; \
+				failed=$$((failed + 1)); \
+			fi; \
+		else \
+			echo "  $$test: SKIP (not found)"; \
+			skipped=$$((skipped + 1)); \
+		fi; \
+	done; \
+	echo ""; \
+	echo "RV64UI Results: $$passed passed, $$failed failed, $$skipped skipped"
+
+# RV64MI tests
+rv64mi: $(BUILD_DIR)
+	@echo "Running RV64MI tests from $(RISCV_TESTS_DIR)..."
+	@passed=0; failed=0; skipped=0; \
+	for test in $(RV64MI_TESTS); do \
+		TEST_SRC=$(RISCV_TESTS_DIR)/rv64mi-p-$$test; \
+		if [ -f $$TEST_SRC ]; then \
+			echo -n "  $$test: "; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64mi-p-$$test.bin 2>/dev/null; \
+			if $(SIM) $(BUILD_DIR)/rv64mi-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv64mi-p-$$test.log 2>&1; then \
+				echo "PASS"; \
+				passed=$$((passed + 1)); \
+			else \
+				echo "FAIL"; \
+				failed=$$((failed + 1)); \
+			fi; \
+		else \
+			echo "  $$test: SKIP (not found)"; \
+			skipped=$$((skipped + 1)); \
+		fi; \
+	done; \
+	echo ""; \
+	echo "RV64MI Results: $$passed passed, $$failed failed, $$skipped skipped"
+
+# RV64UM tests
+rv64um: $(BUILD_DIR)
+	@echo "Running RV64UM tests from $(RISCV_TESTS_DIR)..."
+	@passed=0; failed=0; skipped=0; \
+	for test in $(RV64UM_TESTS); do \
+		TEST_SRC=$(RISCV_TESTS_DIR)/rv64um-p-$$test; \
+		if [ -f $$TEST_SRC ]; then \
+			echo -n "  $$test: "; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64um-p-$$test.bin 2>/dev/null; \
+			if $(SIM) $(BUILD_DIR)/rv64um-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv64um-p-$$test.log 2>&1; then \
+				echo "PASS"; \
+				passed=$$((passed + 1)); \
+			else \
+				echo "FAIL"; \
+				failed=$$((failed + 1)); \
+			fi; \
+		else \
+			echo "  $$test: SKIP (not found)"; \
+			skipped=$$((skipped + 1)); \
+		fi; \
+	done; \
+	echo ""; \
+	echo "RV64UM Results: $$passed passed, $$failed failed, $$skipped skipped"
+
+clean:
+	rm -rf $(BUILD_DIR)
