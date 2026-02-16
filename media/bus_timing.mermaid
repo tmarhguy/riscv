@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant Master as Processor (IronCore)
+    participant Slave as Memory/Peripheral
+
+    Note over Master, Slave: Read Transaction
+    Master->>Slave: CYC=1, STB=1, WE=0, ADR=0x100
+    activate Slave
+    Slave-->>Master: Wait States (Stall)
+    Slave->>Master: ACK=1, DAT_R=0xDATA
+    deactivate Slave
+    Master->>Slave: CYC=0, STB=0
+
+    Note over Master, Slave: Write Transaction
+    Master->>Slave: CYC=1, STB=1, WE=1, ADR=0x200, DAT_W=0x1234
+    activate Slave
+    Slave-->>Master: Wait States
+    Slave->>Master: ACK=1
+    deactivate Slave
+    Master->>Slave: CYC=0, STB=0

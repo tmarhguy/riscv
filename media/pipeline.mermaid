@@ -1,0 +1,54 @@
+graph TD
+    subgraph "Instruction Fetch (IF)"
+        PC_Gen(PC Generator) -->|PC| I_Mem[(Instruction Memory)]
+        I_Mem -->|Instr| IF_ID_Reg[IF/ID Register]
+        PC_Gen -->|PC+4| IF_ID_Reg
+    end
+
+    subgraph "Instruction Decode (ID)"
+        IF_ID_Reg -->|Instr| Dec(Decoder)
+        IF_ID_Reg -->|PC| ID_EX_Reg[ID/EX Register]
+        Dec -->|Opcode/Funct| Ctrl(Control Unit)
+        Dec -->|Rs1/Rs2| RegFile(Register File)
+        Dec -->|Imm| ImmGen(Imm Generator)
+        RegFile -->|Data1| ID_EX_Reg
+        RegFile -->|Data2| ID_EX_Reg
+        ImmGen -->|Imm| ID_EX_Reg
+    end
+
+    subgraph "Execute (EX)"
+        ID_EX_Reg -->|Data1| ALU_Mux1
+        ID_EX_Reg -->|Data2| ALU_Mux2
+        ALU_Mux1 --> ALU(Arithmetic Logic Unit)
+        ALU_Mux2 --> ALU
+        ID_EX_Reg -->|Control| ALU_Ctrl
+        ALU -->|Result| EX_MEM_Reg[EX/MEM Register]
+        
+        subgraph "M-Extension"
+            ID_EX_Reg -->|Data1/2| MulDiv(Multiplier/Divider)
+            MulDiv -->|Result| EX_MEM_Reg
+        end
+    end
+
+    subgraph "Memory (MEM)"
+        EX_MEM_Reg -->|Addr| D_Mem[(Data Memory)]
+        EX_MEM_Reg -->|Write Data| D_Mem
+        D_Mem -->|Read Data| MEM_WB_Reg[MEM/WB Register]
+        EX_MEM_Reg -->|ALU Result| MEM_WB_Reg
+    end
+
+    subgraph "Writeback (WB)"
+        MEM_WB_Reg -->|Read Data / ALU Result| WB_Mux
+        WB_Mux -->|Write Data| RegFile
+    end
+
+    %% Hazard Forwarding
+    EX_MEM_Reg -.->|Forwarding| ALU_Mux1
+    MEM_WB_Reg -.->|Forwarding| ALU_Mux1
+    EX_MEM_Reg -.->|Forwarding| ALU_Mux2
+    MEM_WB_Reg -.->|Forwarding| ALU_Mux2
+
+    style PC_Gen fill:#f9f,stroke:#333
+    style RegFile fill:#bbf,stroke:#333
+    style ALU fill:#bfb,stroke:#333
+    style D_Mem fill:#fbb,stroke:#333

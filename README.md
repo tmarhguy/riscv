@@ -3,20 +3,14 @@
 > **Production-grade 64-bit RISC-V Core: 5-Stage Pipeline, Precise Exceptions, ASIC-Ready.**
 > **Language:** SystemVerilog | **Standard:** RV64IM
 
-[![CI Status](https://github.com/v1/ironcore/actions/workflows/ci.yml/badge.svg)](https://github.com/v1/ironcore/actions) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Verification](https://img.shields.io/badge/verification-100%25_passing-brightgreen)](docs/VERIFICATION.md) [![Architecture](https://img.shields.io/badge/ISA-RV64IM-blue)](docs/ARCHITECTURE.md)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Verification](https://img.shields.io/badge/verification-100%25_passing-brightgreen)](docs/verification.md) [![Architecture](https://img.shields.io/badge/ISA-RV64IM-blue)](docs/architecture.md)
 
 **Designed for Synthesis. Built for Reliability.**
 
 > [!NOTE]
-> This is a portfolio-grade engineering project demonstrating a complete digital design lifecycle: Specification → Microarchitecture → RTL →/ Verification → Synthesis.
+> This is a portfolio-grade engineering project demonstrating a complete digital design lifecycle: Specification → Microarchitecture → RTL → Verification → Synthesis.
 >
 > **Status:** RTL Verified (RV32IM Compliance 100%). FPGA Synthesis Ready.
-
-<div align="center">
-    <img src="https://raw.githubusercontent.com/v1/ironcore/main/media/pipeline_diagram.png" width="800" alt="IronCore Pipeline Diagram">
-    <br>
-    <em>Figure 1 - IronCore 5-Stage In-Order Pipeline with Hazard Forwarding</em>
-</div>
 
 ---
 
@@ -24,9 +18,9 @@
 
 | **Overview** | **Design** | **Verification** | **Start** |
 | :--- | :--- | :--- | :--- |
-| [Mission](#mission-statement) | [Architecture](docs/ARCHITECTURE.md) | [Strategy](docs/VERIFICATION.md) | [Quick Start](#5-minute-quick-start) |
-| [Features](#features) | [Opcodes](docs/OPCODE_TABLE.md) | [Results](docs/VERIFICATION.md#current-status) | [Docker Setup](docs/GETTING_STARTED.md#option-a-docker-recommended) |
-| [Comparisons](#what-makes-this-different) | [Docs](docs/) | [Coverage](docs/VERIFICATION.md#code-coverage) | [Changelog](meta/CHANGELOG.md) |
+| [Mission](#mission-statement) | [Architecture](docs/architecture.md) | [Strategy](docs/verification.md) | [Quick Start](#5-minute-quick-start) |
+| [Features](#features) | [Opcodes](docs/OPCODE_TABLE.md) | [Results](docs/verification.md#current-status) | [Docker Setup](docs/GETTING_STARTED.md#option-a-docker-recommended) |
+| [Comparisons](#what-makes-this-different) | [Docs](docs/) | [Coverage](docs/verification.md#code-coverage) | [Changelog](meta/CHANGELOG.md) |
 
 ---
 
@@ -37,7 +31,7 @@
 **The Goal:**
 Most educational CPU projects stop at "it runs a Fibonacci program." IronCore was built to survive the rigors of a real SoC environment. It supports **variable-latency memory** (stalls), **precise exceptions** (trap handling), and **standard bus protocols** (Wishbone).
 
-**[Read the detailed architecture design.](docs/ARCHITECTURE.md)**
+**[Read the detailed architecture design.](docs/architecture.md)**
 
 ---
 
@@ -141,7 +135,7 @@ We run the official `riscv-tests` suite. Every instruction behavior is validated
 
 > **Note**: Current compliance validation covers the RV32IM subset to ensure baseline correctness before enabling 64-bit specific compliance tests.
 
-See [Verification Report](docs/VERIFICATION.md).
+See [Verification Report](docs/verification.md).
 
 ---
 
@@ -168,5 +162,5 @@ riscv/
 
 MIT License. See [LICENSE](LICENSE) for details.
 
-**Author:** [Your Name/Handle]
-**Contact:** [Email/Link]
+**Author:** Tyrone Marhguy
+**Contact:** [tmarhguy@gmail.com](mailto:tmarhguy@gmail.com)
