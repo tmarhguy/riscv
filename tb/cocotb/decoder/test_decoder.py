@@ -1,10 +1,9 @@
 import cocotb
 from cocotb.triggers import Timer
 import random
-from cocotb.result import TestFailure
 
 # ----------------------------------------------------------------------------
-# Constants (IronCore Enums/Defines)
+# Constants (riscv64xO3 Enums/Defines)
 # ----------------------------------------------------------------------------
 OP_LUI      = 0b0110111
 OP_AUIPC    = 0b0010111
@@ -207,16 +206,16 @@ async def test_all_opcodes_coverage(dut):
              instr = build_instr(op, funct3=f3, funct7=f7, imm=0)
              
         dut.instr_i.value = instr
-        await Timer(1, units='ns')
+        await Timer(1, unit='ns')
         
         if not check(dut):
             # Print debug info
             dut._log.info(f"Failed Op: {bin(op)} F3: {f3} F7: {hex(f7)}")
             dut._log.info(f"  ALU_OP: {dut.alu_op_o.value}")
             dut._log.info(f"  Illegal: {dut.illegal_instr_o.value}")
-            raise TestFailure(f"Opcode {bin(op)} Func3 {f3} check failed")
+            assert False, (f"Opcode {bin(op)} Func3 {f3} check failed")
         if dut.illegal_instr_o.value == 1:
-             raise TestFailure(f"Opcode {bin(op)} marked illegal unexpectedly")
+             assert False, (f"Opcode {bin(op)} marked illegal unexpectedly")
 
 @cocotb.test()
 async def test_decoder_illegal_opcodes(dut):
@@ -227,16 +226,16 @@ async def test_decoder_illegal_opcodes(dut):
     
     for op in illegal_ops:
         dut.instr_i.value = build_instr(op)
-        await Timer(1, units='ns')
+        await Timer(1, unit='ns')
         if dut.illegal_instr_o.value != 1:
-            raise TestFailure(f"Opcode {bin(op)} should be illegal")
+            assert False, (f"Opcode {bin(op)} should be illegal")
             
     # Illegal funct3/funct7 combinations
     
     # JALR with funct3 != 0
     dut.instr_i.value = build_instr(OP_JALR, funct3=1)
-    await Timer(1, units='ns')
-    if dut.illegal_instr_o.value != 1: raise TestFailure("JALR with funct3=1 should be illegal")
+    await Timer(1, unit='ns')
+    if dut.illegal_instr_o.value != 1: assert False, ("JALR with funct3=1 should be illegal")
 
     # BRANCH with illegal funct3 (e.g., 2, 3 not strictly illegal in 3-bit space but logic usually decodes all?
     # Actually RV32I uses all except 2, 3? Wait.
@@ -245,20 +244,21 @@ async def test_decoder_illegal_opcodes(dut):
     # 000=BEQ, 001=BNE, 100=BLT, 101=BGE, 110=BLTU, 111=BGEU
     # 010 and 011 are reserved.
     dut.instr_i.value = build_instr(OP_BRANCH, funct3=2)
-    await Timer(1, units='ns')
-    if dut.illegal_instr_o.value != 1: raise TestFailure("BRANCH with funct3=2 should be illegal")
+    await Timer(1, unit='ns')
+    if dut.illegal_instr_o.value != 1: assert False, ("BRANCH with funct3=2 should be illegal")
     
-    # LOAD with illegal funct3 (e.g. 3, 6, 7)
-    dut.instr_i.value = build_instr(OP_LOAD, funct3=3) # LD (RV64)
-    await Timer(1, units='ns')
-    if dut.illegal_instr_o.value != 1: raise TestFailure("LOAD with funct3=3 should be illegal")
+    # LOAD with illegal funct3 (7 is the only reserved funct3 in RV64:
+    # 0=LB,1=LH,2=LW,3=LD,4=LBU,5=LHU,6=LWU)
+    dut.instr_i.value = build_instr(OP_LOAD, funct3=7)
+    await Timer(1, unit='ns')
+    if dut.illegal_instr_o.value != 1: assert False, ("LOAD with funct3=7 should be illegal")
 
     # SYSTEM with illegal funct3 (e.g. 4)
     # 0=PRIV, 1=CSRRW, 2=CSRRS, 3=CSRRC, 5=CSRRWI, 6=CSRRSI, 7=CSRRCI
     # 4 is reserved?
     dut.instr_i.value = build_instr(OP_SYSTEM, funct3=4) # Hypervisor?
-    await Timer(1, units='ns')
-    # ironcore_decoder might not decode all CSR ops, but let's see. 
+    await Timer(1, unit='ns')
+    # rv64xo3_decoder might not decode all CSR ops, but let's see. 
     # Logic in view_file showed: else -> is_csr_o=1. It doesn't check funct3 validity for CSRs explicitly outside of OP_SYSTEM top block?
     # Looking at rtl: 
     # if (funct3 == FUNCT3_PRIV) ... else { is_csr_o = 1; ... }
@@ -268,5 +268,5 @@ async def test_decoder_illegal_opcodes(dut):
     # Check PRIV (funct3=0) with illegal funct12
     # e.g. 0xFFF
     dut.instr_i.value = build_instr(OP_SYSTEM, funct3=0, imm=0xFFF)
-    await Timer(1, units='ns')
-    if dut.illegal_instr_o.value != 1: raise TestFailure("SYSTEM PRIV with unknown funct12 should be illegal")
+    await Timer(1, unit='ns')
+    if dut.illegal_instr_o.value != 1: assert False, ("SYSTEM PRIV with unknown funct12 should be illegal")

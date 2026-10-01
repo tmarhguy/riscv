@@ -167,14 +167,14 @@ class AXI4LiteFullSlave:
 @cocotb.test()
 async def test_imem_basic_read(dut):
     """Test basic instruction memory read"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
     
     # Reset
     dut.rst_ni.value = 0
     dut.fetch_req_i.value = 0
     dut.fetch_addr_i.value = 0
-    await Timer(50, units="ns")
+    await Timer(50, unit="ns")
     dut.rst_ni.value = 1
     await RisingEdge(dut.clk_i)
     
@@ -205,13 +205,13 @@ async def test_imem_basic_read(dut):
 @cocotb.test()
 async def test_dmem_write_read(dut):
     """Test data memory write and read"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
     
     # Reset
     dut.rst_ni.value = 0
     dut.mem_req_i.value = 0
-    await Timer(50, units="ns")
+    await Timer(50, unit="ns")
     dut.rst_ni.value = 1
     await RisingEdge(dut.clk_i)
     
@@ -259,13 +259,13 @@ async def test_dmem_write_read(dut):
 @cocotb.test()
 async def test_dmem_byte_enables(dut):
     """Test byte enable functionality"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
     
     # Reset
     dut.rst_ni.value = 0
     dut.mem_req_i.value = 0
-    await Timer(50, units="ns")
+    await Timer(50, unit="ns")
     dut.rst_ni.value = 1
     await RisingEdge(dut.clk_i)
     

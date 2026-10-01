@@ -109,7 +109,7 @@ class WishboneSoC:
 @cocotb.test()
 async def test_hello_demo(dut):
     """Run sw/hello.c program"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
     
     soc = WishboneSoC(dut)

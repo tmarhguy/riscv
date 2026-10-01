@@ -1,12 +1,11 @@
 """
-IronCore Cocotb Test Suite
+riscv64xO3 Cocotb Test Suite
 Smoke tests and integration tests for the RV32IM processor
 """
 
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ClockCycles, Timer
-from cocotb.result import TestFailure
 import pytest
 
 
@@ -95,7 +94,7 @@ async def reset_dut(dut, cycles=5):
 @pytest.mark.smoke
 async def test_reset(dut):
     """Test that reset works correctly"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     await reset_dut(dut)
@@ -111,7 +110,7 @@ async def test_reset(dut):
 @pytest.mark.smoke
 async def test_nop_execution(dut):
     """Test execution of NOP instructions"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # NOP = ADDI x0, x0, 0 = 0x00000013
@@ -142,7 +141,7 @@ async def test_nop_execution(dut):
 @cocotb.test()
 async def test_addi(dut):
     """Test ADDI instruction"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # ADDI x1, x0, 42   -> x1 = 42
@@ -175,7 +174,7 @@ async def test_addi(dut):
 @cocotb.test()
 async def test_load_store(dut):
     """Test load and store instructions"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # Program:
@@ -214,7 +213,7 @@ async def test_load_store(dut):
 @cocotb.test()
 async def test_branch_taken(dut):
     """Test branch instruction (taken)"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # Program:
@@ -249,7 +248,7 @@ async def test_branch_taken(dut):
 @cocotb.test()
 async def test_jal(dut):
     """Test JAL instruction"""
-    clock = Clock(dut.clk_i, 10, units="ns")
+    clock = Clock(dut.clk_i, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     # Program:
