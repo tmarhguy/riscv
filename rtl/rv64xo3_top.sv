@@ -58,10 +58,20 @@ module rv64xo3_top #(
   logic                        [XLEN-1:0] alu_result_ex;
   logic                                   branch_taken_ex;
   logic                        [XLEN-1:0] branch_target_ex;
-  logic                                   muldiv_busy;
-  logic                        [XLEN-1:0] muldiv_result;
-  logic                                   muldiv_valid;
-  logic                                   muldiv_stall;
+  logic                        [XLEN-1:0] mul_result_ex;
+  logic                        [XLEN-1:0] div_result_ex;
+  logic                                   div_valid_ex;
+  logic                                   div_engine_busy;
+
+  // DIV scoreboard: one outstanding DIV (see Phase 1 notes below)
+  logic                                   div_busy;
+  logic                        [REG_ADDR_W-1:0] div_slot_rd;
+  logic                                   div_op_ex;
+  logic                                   div_issue;
+  logic                                   div_struct_stall;
+  logic                                   div_raw_stall;
+  logic                                   div_inject;
+  logic                                   div_kill;
 
   // Memory signals
   logic                        [XLEN-1:0] mem_rdata;
@@ -158,13 +168,24 @@ module rv64xo3_top #(
   //--------------------------------------------------------------------------
   // ID Stage - Instruction Decode
   //--------------------------------------------------------------------------
+  // Writeback mux: normal MEM/WB path, except during a DIV inject cycle
+  // when the completed DIV result is written instead (MEM/WB is held, so
+  // no writeback is lost).
+  logic                        [XLEN-1:0] wb_rd_data;
+  logic                        [REG_ADDR_W-1:0] wb_rd_addr;
+  logic                                   wb_rd_wen;
+  assign wb_rd_wen  = div_inject ? (div_slot_rd != 5'd0) :
+                                   (mem_wb_reg.reg_write && mem_wb_reg.valid);
+  assign wb_rd_addr = div_inject ? div_slot_rd : mem_wb_reg.rd_addr;
+  assign wb_rd_data = div_inject ? div_result_ex : mem_wb_reg.result;
+
   rv64xo3_id u_id (
       .clk_i       (clk_i),
       .rst_ni      (rst_ni),
       .if_id_reg_i (if_id_reg),
-      .wb_rd_addr_i(mem_wb_reg.rd_addr),
-      .wb_rd_data_i(mem_wb_reg.result),
-      .wb_rd_wen_i (mem_wb_reg.reg_write && mem_wb_reg.valid),
+      .wb_rd_addr_i(wb_rd_addr),
+      .wb_rd_data_i(wb_rd_data),
+      .wb_rd_wen_i (wb_rd_wen),
       .rs1_data_o  (rs1_data_id),
       .rs2_data_o  (rs2_data_id)
   );
@@ -274,35 +295,53 @@ module rv64xo3_top #(
       .fwd_b_sel_i      (fwd_b_sel),
       .fwd_ex_mem_data_i(ex_mem_reg.alu_result),
       .fwd_mem_wb_data_i(mem_wb_reg.result),
+      .div_start_i    (div_issue),
       .alu_result_o     (alu_result_ex),
       .branch_taken_o   (branch_taken_ex),
       .branch_target_o  (branch_target_ex),
-      .muldiv_busy_o    (muldiv_busy),
-      .muldiv_result_o  (muldiv_result),
-      .muldiv_valid_o   (muldiv_valid)
+      .mul_result_o     (mul_result_ex),
+      .div_result_o     (div_result_ex),
+      .div_valid_o      (div_valid_ex),
+      .div_busy_o       (div_engine_busy)
   );
 
   //--------------------------------------------------------------------------
   // EX/MEM Pipeline Register
   //--------------------------------------------------------------------------
+  // MUL retires from EX like an ALU op (single-cycle). An issued DIV
+  // vanishes here into a bubble: its result arrives later via the
+  // scoreboard inject, so it must neither forward nor write back.
+  // When EX is frozen while MEM advances, MEM takes a bubble instead of
+  // re-capturing the frozen instruction (re-capture would duplicate it
+  // with drifting forward values as MEM/WB drain). The load-use flush
+  // path still saves its load explicitly (flush wins over the bubble).
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       ex_mem_reg <= '0;
     end else if (ctrl.flush_mem) begin
       ex_mem_reg <= '0;
     end else if (!ctrl.stall_mem) begin
-      ex_mem_reg.pc <= id_ex_reg.pc;
-      ex_mem_reg.alu_result <= id_ex_reg.is_muldiv && muldiv_valid ? muldiv_result : 
-                               id_ex_reg.is_csr ? csr_rdata :
-                               alu_result_ex;
-      ex_mem_reg.rs2_data <= fwd_b_data;
-      ex_mem_reg.rd_addr <= id_ex_reg.rd_addr;
-      ex_mem_reg.mem_read <= id_ex_reg.mem_read;
-      ex_mem_reg.mem_write <= id_ex_reg.mem_write;
-      ex_mem_reg.mem_width <= id_ex_reg.mem_width;
-      ex_mem_reg.mem_unsigned <= id_ex_reg.mem_unsigned;
-      ex_mem_reg.reg_write <= id_ex_reg.reg_write;
-      ex_mem_reg.valid <= id_ex_reg.valid && !(id_ex_reg.is_muldiv && !muldiv_valid);
+      // Bubble instead of capturing when: the DIV just issued (div_kill),
+      // or EX is frozen while MEM advances (re-capturing a frozen EX would
+      // duplicate it with drifting forward values as MEM/WB drain).
+      // The load-use flush still saves its load (flush_ex without div_kill
+      // falls through to the normal capture below).
+      if (div_kill || (ctrl.stall_ex && !ctrl.flush_ex)) begin
+        ex_mem_reg <= '0;
+      end else begin
+        ex_mem_reg.pc <= id_ex_reg.pc;
+        ex_mem_reg.alu_result <= id_ex_reg.is_muldiv && !div_op_ex ? mul_result_ex :
+                                 id_ex_reg.is_csr ? csr_rdata :
+                                 alu_result_ex;
+        ex_mem_reg.rs2_data <= fwd_b_data;
+        ex_mem_reg.rd_addr <= id_ex_reg.rd_addr;
+        ex_mem_reg.mem_read <= id_ex_reg.mem_read;
+        ex_mem_reg.mem_write <= id_ex_reg.mem_write;
+        ex_mem_reg.mem_width <= id_ex_reg.mem_width;
+        ex_mem_reg.mem_unsigned <= id_ex_reg.mem_unsigned;
+        ex_mem_reg.reg_write <= id_ex_reg.reg_write;
+        ex_mem_reg.valid <= id_ex_reg.valid;
+      end
     end
   end
 
@@ -412,26 +451,95 @@ module rv64xo3_top #(
                               (pred_miss) ? (branch_taken_ex ? branch_target_ex : id_ex_reg.pc + 64'd4) :
                               '0;
 
+  //--------------------------------------------------------------------------
+  // DIV scoreboard (Phase 1: non-blocking divide)
+  //--------------------------------------------------------------------------
+  // MUL retires from EX like an ALU op and needs no tracking. A DIV is
+  // latched into the iterative engine and releases EX immediately; at most
+  // one DIV is outstanding, tracked here by destination register. While it
+  // is outstanding:
+  // - ID stalls on any instruction touching that register (RAW or WAW;
+  //   rs2 is checked raw, so I-type ops with aliasing immediates may stall
+  //   spuriously — safe, and Tomasulo will make it moot).
+  // - a second DIV in EX waits (structural: single engine).
+  // - on completion the pipe freezes one cycle and the result is written
+  //   straight to the register file (MEM/WB is held, so nothing is lost).
+  // The DIV instruction itself vanishes from the pipe at issue (bubble),
+  // so it can neither forward garbage nor write back early.
+
+  // DIV-class op currently in EX?
+  always_comb begin
+    case (id_ex_reg.muldiv_op)
+      MD_MUL, MD_MULH, MD_MULHSU, MD_MULHU, MD_MULW: div_op_ex = 1'b0;
+      default: div_op_ex = id_ex_reg.valid && id_ex_reg.is_muldiv;
+    endcase
+  end
+
+  // Single-cycle accept pulse: DIV in EX, engine free (both the slot and
+  // the engine agree; either one alone blocks).
+  assign div_issue = id_ex_reg.valid && div_op_ex && !div_busy && !div_engine_busy;
+  // Structural: DIV waiting in EX while the engine is busy.
+  assign div_struct_stall = id_ex_reg.valid && div_op_ex && (div_busy || div_engine_busy);
+  // RAW/WAW on the outstanding DIV destination (checked in ID).
+  // NOTE: a frozen VALID instruction in EX must never be re-captured into
+  // MEM (it would duplicate with live-forward drift as MEM/WB drain), so
+  // the EX/MEM capture below inserts a bubble whenever EX is stalled while
+  // MEM advances. The load-use flush path still saves its load explicitly.
+  assign div_raw_stall = div_busy && if_id_reg.valid && (div_slot_rd != 5'd0) &&
+                         ((if_id_reg.instr[19:15] == div_slot_rd) ||
+                          (if_id_reg.instr[24:20] == div_slot_rd) ||
+                          (if_id_reg.instr[11:7]  == div_slot_rd));
+  // Completion inject (engine DONE pulse while a DIV is outstanding).
+  assign div_inject = div_valid_ex && div_busy;
+  // Issued DIVs vanish from the pipe (bubble) instead of flowing to MEM.
+  assign div_kill = id_ex_reg.valid && div_op_ex && (div_issue || div_busy);
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      div_busy    <= 1'b0;
+      div_slot_rd <= '0;
+    end else if (div_inject) begin
+      div_busy <= 1'b0;
+    end else if (div_issue) begin
+      div_busy    <= 1'b1;
+      div_slot_rd <= id_ex_reg.rd_addr;
+    end
+  end
+
   // Control signal generation
   always_comb begin
-    // Stall logic
-    muldiv_stall   = id_ex_reg.valid && id_ex_reg.is_muldiv && !muldiv_valid;
-
     // Stall conditions.
     // NOTE: load_use_hazard stalls EX as well as IF/ID. A load in EX must
     // never be flushed while MEM is frozen (older bus op): ex_mem could not
     // capture it and the load would be lost, silently corrupting the stream
     // (seen as ld_st compliance failures). flush_ex below is therefore
     // suppressed while mem_stall holds; the front simply waits.
-    ctrl.stall_if  = fetch_stall || load_use_hazard || muldiv_stall || mem_stall;
-    ctrl.stall_id  = load_use_hazard || muldiv_stall || mem_stall;
-    ctrl.stall_ex  = load_use_hazard || muldiv_stall || mem_stall;
-    ctrl.stall_mem = mem_stall;
+    //
+    // NOTE: div_issue holds IF/ID for exactly the issue cycle so the
+    // consumer behind the DIV cannot enter EX before the scoreboard sees
+    // the outstanding DIV (it would read a stale rd with no forward
+    // available). Scoreboard/structural/inject stalls freeze the front
+    // (and MEM for structural/inject, so no instruction is duplicated or
+    // lost while waiting).
+    ctrl.stall_if  = fetch_stall || load_use_hazard || div_raw_stall || div_struct_stall || div_issue || div_inject || mem_stall;
+    ctrl.stall_id  = load_use_hazard || div_raw_stall || div_struct_stall || div_issue || div_inject || mem_stall;
+    ctrl.stall_ex  = load_use_hazard || div_raw_stall || div_struct_stall || div_inject || mem_stall;
+    ctrl.stall_mem = div_struct_stall || div_inject || mem_stall;
 
-    // Flush conditions (branch/jump redirect or trap)
+    // Flush conditions (branch/jump redirect or trap).
+    // div_issue also flushes EX: the issued DIV lives on in the engine and
+    // slot, so discarding it from the pipe here is what makes the accept
+    // single-shot (it can never be re-issued on a later cycle).
+    // div_raw flushes EX like a load-use: the scoreboard consumer must stay
+    // in ID (it re-reads fresh registers on release), while whatever sits
+    // in EX advances once into MEM and drains. Freezing a VALID instruction
+    // in EX instead would let its latched operands go stale as forwarding
+    // sources drain, corrupting it on release. Both flushes are suppressed
+    // while MEM is frozen (a frozen instruction must be preserved, and a
+    // structural DIV wait always freezes MEM with it, so an unissued DIV
+    // can never be flushed here).
     ctrl.flush_if  = pc_redirect;
     ctrl.flush_id  = pc_redirect;
-    ctrl.flush_ex  = load_use_hazard && !mem_stall; // Insert bubble on load-use hazard
+    ctrl.flush_ex  = div_issue || ((load_use_hazard || div_raw_stall) && !mem_stall); // Insert bubble on load-use hazard
     ctrl.flush_mem = trap_taken;
   end
 
@@ -463,6 +571,20 @@ module rv64xo3_top #(
   // Trap logic
   assign trap_taken = exc_valid;
   assign mret_taken = id_ex_reg.valid && id_ex_reg.is_mret;
+`ifndef SYNTHESIS
+  // Temporary Phase-1 tracer
+  always @(posedge clk_i) begin
+    if (rst_ni && (div_issue || div_inject || div_raw_stall || div_struct_stall)) begin
+      $display("[DIV] is=%0d inj=%0d raw=%0d str=%0d busy=%0d slot=x%0d id=%0h(%0d) ex=%0h(%0d) mem=%0h(%0d) wb=%0h(%0d)",
+               div_issue, div_inject, div_raw_stall, div_struct_stall, div_busy, div_slot_rd,
+               if_id_reg.pc, if_id_reg.valid, id_ex_reg.pc, id_ex_reg.valid,
+               ex_mem_reg.pc, ex_mem_reg.valid, mem_wb_reg.pc, mem_wb_reg.valid);
+    end
+    if (rst_ni && id_ex_reg.valid && id_ex_reg.is_branch) begin
+      $display("[BR] pc=%0h A=%0h B=%0h taken=%0d", id_ex_reg.pc, fwd_a_data, fwd_b_data, branch_taken_ex);
+    end
+  end
+`endif
 
   // Exception detection
   // Priority: Memory exceptions (MEM stage) > EX stage exceptions.
