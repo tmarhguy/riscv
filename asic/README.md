@@ -1,26 +1,23 @@
-# ASIC Directory
+# ASIC feasibility (sky130)
 
-This directory contains configuration and reports for ASIC feasibility studies using OpenLane and the SkyWater 130nm PDK.
+OpenLane2/LibreLane RTL-to-GDSII smoke for `rv64xo3_top`. This proves the RTL
+is physically plausible and yields area/timing estimates. It is not a tapeout.
 
-## Purpose
-To demonstrate that the IronCore RTL is physically realizable in silicon, providing estimates for area, timing, and power.
+## Files
 
-## Workflow
-We use **OpenLane**, an automated RTL-to-GDSII flow.
+- `config.json`: canonical flow config (sources, clock, density).
+- `config.tcl`: OpenLane1-compatible shim.
+- `constraints.sdc`: 100 MHz nominal (`clk_i`, 10 ns).
+- `runs/`, `logs/`, `reports/`: outputs, never committed.
 
-## Key Files
-*   `config.tcl` / `config.json`: OpenLane configuration (constraints, clock period, floorplanning).
-*   `runs/`: Output directory for synthesis and PnR runs (not committed).
-
-## How to Run
-(Requires OpenLane installation)
+## Run
 
 ```bash
-make asic-feasibility
-# OR
-flow.tcl -design . -tag run1
+make synth       # Yosys smoke (CI)
+make asic-feas   # OpenLane feasibility (needs PDK)
 ```
 
 ## Status
-*   **Feasibility**: Synthesis reports confirm the design fits within target area constraints.
-*   **Timing**: Closes timing at target frequency (see latest reports in `logs/`).
+
+See `docs/index.adoc` ch. 9 (Known Limitations). Yosys smoke must pass before any PnR run. Timing target
+is 100 MHz nominal; push to 200 MHz once OoO commit lands.

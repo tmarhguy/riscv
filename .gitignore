@@ -1,4 +1,4 @@
-# IronCore .gitignore
+# riscv64xO3 .gitignore
 
 # Build artifacts
 build/
@@ -47,6 +47,18 @@ Thumbs.db
 # Coverage
 coverage/
 *.ucdb
+coverage.dat
+coverage_cocotb.dat
+results.xml
+
+# Compiled SW / test images (rebuild via make; never commit)
+*.o
+*.elf
+*.hex
+*.bin
+*.mem
+*.lst
+*.map
 
 # Temporary
 *.tmp
@@ -58,7 +70,7 @@ logs/
 debug_*.log
 debug_*.dump
 
-# IronCore Specific
+# riscv64xO3 Specific
 coverage_cocotb.dat
 .pytest_cache/
 __pycache__/
@@ -66,3 +78,21 @@ sim_build/
 waves/
 *.vcd
 *.fst
+
+# ASIC / PnR runs (reproduce via make asic-*)
+asic/runs/
+asic/logs/
+asic/reports/
+*.gds
+*.lef
+*.def
+
+# Web
+web/node_modules/
+web/.next/
+web/dist/
+
+# Docs builds (Asciidoctor manual -> build/docs/, source stays in docs/)
+build/docs/
+site/
+docs/_site/

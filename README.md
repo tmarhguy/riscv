@@ -1,166 +1,91 @@
-# IronCore RV64IM Processor
+<h1 align="center">riscv64xO3</h1>
+<p align="center"><strong>A 64-bit superscalar out-of-order RISC-V core, from RTL to silicon feasibility.</strong></p>
+<p align="center">
+  <a href="docs/index.adoc"><img alt="Status: active development" src="https://img.shields.io/badge/status-active%20development-2ea043"></a>
+  <a href="docs/index.adoc"><img alt="Architecture: RV64IMAC OoO" src="https://img.shields.io/badge/architecture-RV64IMAC%20OoO-011F5B"></a>
+  <a href="docs/isa/rv64xo3.csv"><img alt="ISA: RV64IMAC + Zicsr" src="https://img.shields.io/badge/ISA-RV64IMAC%2BZicsr-DC2626"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
+</p>
 
-> **Production-grade 64-bit RISC-V Core: 5-Stage Pipeline, Precise Exceptions, ASIC-Ready.**
-> **Language:** SystemVerilog | **Standard:** RV64IM
+**Explore:** [technical manual](docs/index.adoc) ·
+[ISA contract](docs/isa/rv64xo3.csv) ·
+[history](docs/log/)
 
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Verification](https://img.shields.io/badge/verification-100%25_passing-brightgreen)](docs/verification.md) [![Architecture](https://img.shields.io/badge/ISA-RV64IM-blue)](docs/architecture.md)
+## Architecture at a glance
 
-**Designed for Synthesis. Built for Reliability.**
+2-wide fetch/decode/issue/commit. Tomasulo reservation stations, 96-entry
+physical register file, 64-entry ROB, 16-entry LSQ, dual CDB, gshare+BTB+RAS.
+AXI4-Lite native. M-mode precise traps. See the
+[technical manual](docs/index.adoc).
 
-> [!NOTE]
-> This is a portfolio-grade engineering project demonstrating a complete digital design lifecycle: Specification → Microarchitecture → RTL → Verification → Synthesis.
->
-> **Status:** RTL Verified (RV32IM Compliance 100%). FPGA Synthesis Ready.
-
----
-
-## Navigation
-
-| **Overview** | **Design** | **Verification** | **Start** |
-| :--- | :--- | :--- | :--- |
-| [Mission](#mission-statement) | [Architecture](docs/architecture.md) | [Strategy](docs/verification.md) | [Quick Start](#5-minute-quick-start) |
-| [Features](#features) | [Opcodes](docs/OPCODE_TABLE.md) | [Results](docs/verification.md#current-status) | [Docker Setup](docs/GETTING_STARTED.md#option-a-docker-recommended) |
-| [Comparisons](#what-makes-this-different) | [Docs](docs/) | [Coverage](docs/verification.md#code-coverage) | [Changelog](meta/CHANGELOG.md) |
-
----
-
-## The Philosophy: "Production Discipline"
-
-> *"Toy processors are easy. Handling hazards, exceptions, and bus protocols correctly is engineering."*
-
-**The Goal:**
-Most educational CPU projects stop at "it runs a Fibonacci program." IronCore was built to survive the rigors of a real SoC environment. It supports **variable-latency memory** (stalls), **precise exceptions** (trap handling), and **standard bus protocols** (Wishbone).
-
-**[Read the detailed architecture design.](docs/architecture.md)**
-
----
-
-## Mission Statement
-
-Design and verify a synthesizable, lint-clean 64-bit RISC-V core that bridges the gap between academic theory and industrial reality. Proof of correctness is paramount—if it's not verified, it doesn't work.
-
-> **Evidence:** 100% pass rate on official RISC-V compliance suites (RV32IM) and rigorous unit testing.
-
----
-
-## What Makes This Different
-
-| Feature | Toy Projects | IronCore |
-| :--- | :--- | :--- |
-| **Data Path** | 32-bit only | **64-bit (RV64)** |
-| **Memory** | Magic/Single-cycle | **Variable Latency (Handshake)** |
-| **Hazards** | Stalls only | **Full Forwarding Network** |
-| **Interfaces** | Ad-hoc signals | **Standard Wishbone B4** |
-| **Verification**| "It works on my machine" | **CI/CD, Cocotb, Compliance Suites** |
-
----
-
-## System Specifications
-
-| Parameter | Value | Notes |
-| :--- | :--- | :--- |
-| **ISA** | RV64IM | Base Integer + Multiply/Divide |
-| **Pipeline** | 5-Stage | IF, ID, EX, MEM, WB |
-| **Privilege** | M-Mode | Machine Mode with Traps |
-| **Bus** | Wishbone B4 | Pipelined Master |
-| **Testing** | Verilator + Cocotb | Open-source flow |
-| **Linting** | Verible | Zero warnings policy |
-
----
-
-## Features
-
-### Instruction Set (RV64IM)
-*   **Integer**: Full 64-bit arithmetic (`ADD`, `SUB`, `XOR`, etc.)
-*   **Word Ops**: 32-bit variants (`ADDW`, `SLLW`, etc.) for efficiency.
-*   **Multiply**: High-performance iterative multiplier.
-*   **System**: `ECALL`, `EBREAK`, `MRET` for OS primitives.
-
-### Microarchitecture
-*   **Branch Prediction**: Bimodal predictor to reduce fetch bubbles.
-*   **Hazard Unit**: Detects dependencies and forwards data (EX→ID, MEM→ID) or stalls (Load-Use).
-*   **CSRs**: Implements `mstatus`, `mie`, `mtvec`, `mepc`, `mcause` for exception handling.
-
-See [Opcode Table](docs/OPCODE_TABLE.md) for supported instructions.
-
----
-
-## 5-Minute Quick Start
-
-**Prerequisites:** Docker (Recommended) or Verilator + Python 3.
-
-### 1. Build the Docker Environment
-```bash
-make docker-build
+```mermaid
+graph LR
+  IF[Fetch 2-wide] --> ID[Rename/Dispatch]
+  ID --> IS[RS + Execute]
+  IS --> MEM[LSQ + AXI]
+  MEM --> CM[ROB Commit]
 ```
 
-### 2. Run the Full Regression
-This runs Linting, Unit Tests, and RISC-V Compliance tests.
+## What runs now
+
+| Layer | Current, repository-backed statement |
+|---|---|
+| ISA | RV64IM implemented; A/C in bring-up (`docs/isa/rv64xo3.csv`) |
+| Core | 5-stage scalar pipeline renamed to `rv64xo3_*`; OoO scaffolding landing |
+| Bus | AXI4-Lite IMEM/DMEM masters |
+| Verification | Verilator + cocotb + `riscv-tests` RV64UI/UM |
+| ASIC | Yosys synth smoke + OpenLane2 feasibility (`asic/`) |
+
+Use the [technical manual](docs/index.adoc) for evidence boundaries. History lives
+in [`docs/log/`](docs/log/).
+
+## See it, run it, inspect it
+
+### Local RTL simulation
+
 ```bash
+make docker-build
 make docker-shell
-# Inside container:
+# inside:
 make regress
 ```
 
-**Expected Output:**
-```text
-[TEST] Running RISC-V compliance tests...
-RV32UI: 37 passed
-RV32UM: 8 passed
-[REGRESS] All regression tests PASSED
-```
+### Focused checks
 
-### 3. View Waveforms
 ```bash
-make waves
+python3 tools/check_docs.py
+make lint
+make unit cocotb-smoke
 ```
 
-See [GETTING_STARTED.md](docs/GETTING_STARTED.md) for manual setup.
+### Technical manual
 
----
-
-## Verification Strategy
-
-We don't just "hope" it works. We prove it.
-
-### 1. Unit Testing
-Python-based `pytest` suites verify the ALU, Decoder, and CSR logic in isolation.
-
-### 2. Integration Testing
-`cocotb` drives the full pipeline via the Wishbone interface, injecting random stalls and hazards to ensure robustness.
-
-### 3. Compliance Testing
-**Status: 100% Passing (RV32IM)**
-We run the official `riscv-tests` suite. Every instruction behavior is validated against the Golden Reference.
-
-> **Note**: Current compliance validation covers the RV32IM subset to ensure baseline correctness before enabling 64-bit specific compliance tests.
-
-See [Verification Report](docs/verification.md).
-
----
-
-## Directory Structure
-
-```text
-riscv/
-├── rtl/            # SystemVerilog Source (Synthesizable)
-│   ├── ironcore_top.sv
-│   └── ...
-├── tb/             # Testbenches
-│   ├── unit/       # Pytest
-│   ├── cocotb/     # Integration
-│   └── compliance/ # RISC-V Tests
-├── docs/           # Documentation
-├── scripts/        # Build scripts
-├── Makefile        # Entrypoint
-└── Dockerfile      # Reproducible Env
+```bash
+make docs       # build to build/docs/
+make docs-open  # serve locally
 ```
 
----
+## Repository map
 
-## License
+| Path | Purpose |
+|---|---|
+| [`rtl/`](rtl/) | SystemVerilog source (synthesizable) |
+| [`tb/`](tb/) | Unit, cocotb, compliance, formal |
+| [`docs/`](docs/index.adoc) | Technical manual source (AsciiDoc) + ISA contract + history |
+| [`asic/`](asic/) | Synth + OpenLane feasibility |
+| [`sw/`](sw/) | CRT, linker scripts, bare-metal examples |
+| [`tools/`](tools/) | Docs guardrails, ISA generators |
+| [`docker/`](docker/) | Dev + CI images |
 
-MIT License. See [LICENSE](LICENSE) for details.
+## Documentation
 
-**Author:** Tyrone Marhguy
-**Contact:** [tmarhguy@gmail.com](mailto:tmarhguy@gmail.com)
+Detailed architecture, implementation, verification, and technical documentation is available in the project documentation.
+
+Start with [`docs/index.adoc`](docs/index.adoc) (builds to `build/docs/` via `make docs`). Authority order: `rtl/` SystemVerilog, then the manual's current facts, then machine-readable contracts (`docs/isa/rv64xo3.csv`), then other prose, then `docs/log/` history.
+
+## License and author
+
+MIT License. See [LICENSE](LICENSE).
+
+**Author:** Tyrone Marhguy — Computer Engineering ’28, University of Pennsylvania.
+[Contributing](CONTRIBUTING.md) · [security](SECURITY.md) · [citation](CITATION.cff)
