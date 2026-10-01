@@ -10,7 +10,7 @@ RVTEST_CODE_BEGIN
 # Store value, load it, use immediately
 #-----------------------------------------------------------------------------
 test_1:
-    li      x1, 0x80000100      # RAM address
+    li      x1, 0x80003100      # RAM address
     li      x2, 42              # Value to store
     sw      x2, 0(x1)           # Store 42
     nop
@@ -23,7 +23,7 @@ test_1:
 # Test 2: Load followed by independent instruction (no stall needed)
 #-----------------------------------------------------------------------------
 test_2:
-    li      x1, 0x80000104
+    li      x1, 0x80003104
     li      x2, 100
     sw      x2, 0(x1)
     nop
@@ -37,7 +37,7 @@ test_2:
 # Test 3: Load with 1 NOP gap (should not need stall)
 #-----------------------------------------------------------------------------
 test_3:
-    li      x1, 0x80000108
+    li      x1, 0x80003108
     li      x2, 77
     sw      x2, 0(x1)
     nop
@@ -51,7 +51,7 @@ test_3:
 # Test 4: Double load-use (consecutive loads used immediately)
 #-----------------------------------------------------------------------------
 test_4:
-    li      x1, 0x80000110
+    li      x1, 0x80003110
     li      x2, 10
     li      x3, 20
     sw      x2, 0(x1)
@@ -67,7 +67,7 @@ test_4:
 # Test 5: Load-use with branch
 #-----------------------------------------------------------------------------
 test_5:
-    li      x1, 0x80000120
+    li      x1, 0x80003120
     li      x2, 5
     sw      x2, 0(x1)
     nop
@@ -83,7 +83,7 @@ test_5_pass:
 # Test 6: Store after load (no hazard, just verify correctness)
 #-----------------------------------------------------------------------------
 test_6:
-    li      x1, 0x80000130
+    li      x1, 0x80003130
     li      x2, 99
     sw      x2, 0(x1)
     nop
@@ -99,7 +99,7 @@ test_6:
 # Test 7: Load byte, use immediately
 #-----------------------------------------------------------------------------
 test_7:
-    li      x1, 0x80000140
+    li      x1, 0x80003140
     li      x2, 0x12345678
     sw      x2, 0(x1)
     nop
@@ -114,7 +114,7 @@ test_7:
 # Test 8: Load halfword, use immediately
 #-----------------------------------------------------------------------------
 test_8:
-    li      x1, 0x80000150
+    li      x1, 0x80003150
     li      x2, 0xABCD1234
     sw      x2, 0(x1)
     nop

@@ -6,7 +6,7 @@
 RVTEST_CODE_BEGIN
 
     # Base address for tests
-    li      x20, 0x80000200
+    li      x20, 0x80003200
 
 #-----------------------------------------------------------------------------
 # Test 1: SW/LW (word)
@@ -188,12 +188,12 @@ test_10:
 # Test 11: Negative offset
 #-----------------------------------------------------------------------------
 test_11:
-    li      x1, 0x80000300      # Higher address
+    li      x1, 0x80003300      # Higher address
     li      x2, 0xCAFEBABE
     sw      x2, 0(x1)
     nop
     nop
-    lw      x3, -256(x1)        # Load from 0x80000200 (test_1's location)
+    lw      x3, -256(x1)        # Load from 0x80003200 (test_1's location)
     li      x4, 0xDEADBEEF      # This was stored in test_1
     beq     x3, x4, test_11_pass
     j       test_fail
