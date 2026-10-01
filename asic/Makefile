@@ -1,17 +1,16 @@
-# IronCore ASIC Flow
-# Uses OpenLane via Docker
+# riscv64xO3 ASIC Flow (OpenLane2/LibreLane via Docker)
 
-OPENLANE_IMAGE ?= efabless/openlane:latest
+OPENLANE_IMAGE ?= ghcr.io/efabless/openlane:latest
 PROJECT_ROOT ?= $(shell pwd)/..
 CONFIG_DIR ?= $(shell pwd)
-DESIGN_NAME ?= ironcore_top
+DESIGN_NAME ?= rv64xo3_top
 
 .PHONY: all asic clean
 
 all: asic
 
 asic:
-	@echo "Running OpenLane flow..."
+	@echo "Running OpenLane flow (config.json)..."
 	docker run --rm -v $(PROJECT_ROOT):/project \
 		-v $(CONFIG_DIR):/config \
 		-w /project \
@@ -21,4 +20,4 @@ asic:
 		./flow.tcl -design /config -tag run1
 
 clean:
-	rm -rf runs
+	rm -rf runs logs reports

@@ -1,11 +1,12 @@
-# IronCore OpenLane Configuration
-# Target: SKY130
+# riscv64xO3 OpenLane2/LibreLane Configuration
+# Target: SKY130 (sky130A / sky130_fd_sc_hd)
+# Canonical JSON: asic/config.json. This TCL stays for OpenLane1 compat.
 
 set ::env(PDK) "sky130A"
 set ::env(STD_CELL_LIBRARY) "sky130_fd_sc_hd"
 
 # Design
-set ::env(DESIGN_NAME) "ironcore_top"
+set ::env(DESIGN_NAME) "rv64xo3_top"
 
 # Source Files
 if {![info exists ::env(VERILOG_ROOT)]} {
@@ -13,18 +14,23 @@ if {![info exists ::env(VERILOG_ROOT)]} {
 }
 
 set ::env(VERILOG_FILES) [list \
-    $::env(VERILOG_ROOT)/include/ironcore_pkg.sv \
-    $::env(VERILOG_ROOT)/ironcore_alu.sv \
-    $::env(VERILOG_ROOT)/ironcore_muldiv.sv \
-    $::env(VERILOG_ROOT)/ironcore_decoder.sv \
-    $::env(VERILOG_ROOT)/ironcore_if.sv \
-    $::env(VERILOG_ROOT)/ironcore_id.sv \
-    $::env(VERILOG_ROOT)/ironcore_ex.sv \
-    $::env(VERILOG_ROOT)/ironcore_mem.sv \
-    $::env(VERILOG_ROOT)/ironcore_bp.sv \
-    $::env(VERILOG_ROOT)/ironcore_hazard.sv \
-    $::env(VERILOG_ROOT)/ironcore_csr.sv \
-    $::env(VERILOG_ROOT)/ironcore_top.sv \
+    $::env(VERILOG_ROOT)/include/rv64xo3_pkg.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_alu.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_muldiv.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_decoder.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_if.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_id.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_ex.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_mem.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_bp.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_hazard.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_hazard_sva.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_csr.sv \
+    $::env(VERILOG_ROOT)/issue/rv64xo3_rename.sv \
+    $::env(VERILOG_ROOT)/issue/rv64xo3_rs.sv \
+    $::env(VERILOG_ROOT)/memory/rv64xo3_lsq.sv \
+    $::env(VERILOG_ROOT)/commit/rv64xo3_rob.sv \
+    $::env(VERILOG_ROOT)/rv64xo3_top.sv \
 ]
 
 # Clock

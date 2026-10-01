@@ -1,0 +1,31 @@
+{
+  "DESIGN_NAME": "rv64xo3_top",
+  "PDK": "sky130A",
+  "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+  "CLOCK_PORT": "clk_i",
+  "CLOCK_PERIOD": 10.0,
+  "VERILOG_FILES": [
+    "rtl/include/rv64xo3_pkg.sv",
+    "rtl/rv64xo3_alu.sv",
+    "rtl/rv64xo3_muldiv.sv",
+    "rtl/rv64xo3_decoder.sv",
+    "rtl/rv64xo3_if.sv",
+    "rtl/rv64xo3_id.sv",
+    "rtl/rv64xo3_ex.sv",
+    "rtl/rv64xo3_mem.sv",
+    "rtl/rv64xo3_bp.sv",
+    "rtl/rv64xo3_hazard.sv",
+    "rtl/rv64xo3_hazard_sva.sv",
+    "rtl/rv64xo3_csr.sv",
+    "rtl/issue/rv64xo3_rename.sv",
+    "rtl/issue/rv64xo3_rs.sv",
+    "rtl/memory/rv64xo3_lsq.sv",
+    "rtl/commit/rv64xo3_rob.sv",
+    "rtl/rv64xo3_top.sv"
+  ],
+  "FP_SIZING": "relative",
+  "FP_CORE_UTIL": 50,
+  "PL_TARGET_DENSITY": 0.55,
+  "RUN_CTS": true,
+  "RUN_MAGIC": true
+}
