@@ -50,6 +50,7 @@ coverage/
 coverage.dat
 coverage_cocotb.dat
 results.xml
+*.result.xml
 
 # Compiled SW / test images (rebuild via make; never commit)
 *.o
