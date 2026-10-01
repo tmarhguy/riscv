@@ -481,6 +481,12 @@ module rv64xo3_top #(
                if_id_reg.instr);
     end
   end
+    if (rst_ni && id_ex_reg.illegal_instr) begin
+      $display("[ILL] idex pc=%0h valid=%0d ifid pc=%0h valid=%0d instr=%08h",
+               id_ex_reg.pc, id_ex_reg.valid, if_id_reg.pc, if_id_reg.valid,
+               if_id_reg.instr);
+    end
+  end
 `endif
 
   // Exception detection
