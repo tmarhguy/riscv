@@ -3,7 +3,7 @@
 ## [1.0.0] - 2026-02-16
 
 ### Added
-- **Core**: Initial release of IronCore 5-stage pipeline (RV64IM).
+- **Core**: Initial release of riscv64xO3 5-stage pipeline (RV64IM).
 - **Hazard Unit**: Full forwarding (EX->ID, MEM->ID) and load-use stall detection.
 - **Branch Prediction**: Bimodal predictor with configurable table size (default 2-bit counters).
 - **Interface**: Wishbone B4 (Pipeline) Master interface for Instruction and Data.
