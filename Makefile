@@ -1,11 +1,11 @@
-# IronCore RV64IM Processor - Build System
+# riscv64xO3 RV64IMAC OoO Processor - Build System
 # Canonical entrypoint for all project operations
 
-.PHONY: all clean lint format unit cocotb compliance regress synth help
-.PHONY: docker-build docker-shell waves
+.PHONY: all clean lint format sim unit cocotb compliance compliance-rv32 regress synth help
+.PHONY: sw docker-build docker-ci-build docker-shell waves check-docs docs docs-clean docs-open asic-feas
 
 # Configuration
-TOPLEVEL := ironcore_top
+TOPLEVEL := rv64xo3_top
 RTL_DIR := rtl
 TB_DIR := tb
 SW_DIR := sw
@@ -17,26 +17,35 @@ VERILATOR := verilator
 VERIBLE_LINT := verible-verilog-lint
 VERIBLE_FMT := verible-verilog-format
 PYTHON := python3
-PYTEST := pytest
+PYTEST := $(PYTHON) -m pytest
 
 # RTL sources (order matters for dependencies)
 RTL_SRCS := \
-	$(RTL_DIR)/include/ironcore_pkg.sv \
-	$(RTL_DIR)/ironcore_alu.sv \
-	$(RTL_DIR)/ironcore_muldiv.sv \
-	$(RTL_DIR)/ironcore_decoder.sv \
-	$(RTL_DIR)/ironcore_if.sv \
-	$(RTL_DIR)/ironcore_id.sv \
-	$(RTL_DIR)/ironcore_ex.sv \
-	$(RTL_DIR)/ironcore_mem.sv \
-	$(RTL_DIR)/ironcore_bp.sv \
-	$(RTL_DIR)/ironcore_hazard.sv \
-	$(RTL_DIR)/ironcore_csr.sv \
-	$(RTL_DIR)/ironcore_top.sv
+	$(RTL_DIR)/include/rv64xo3_pkg.sv \
+	$(RTL_DIR)/rv64xo3_alu.sv \
+	$(RTL_DIR)/rv64xo3_muldiv.sv \
+	$(RTL_DIR)/rv64xo3_decoder.sv \
+	$(RTL_DIR)/rv64xo3_if.sv \
+	$(RTL_DIR)/rv64xo3_id.sv \
+	$(RTL_DIR)/rv64xo3_ex.sv \
+	$(RTL_DIR)/rv64xo3_mem.sv \
+	$(RTL_DIR)/rv64xo3_bp.sv \
+	$(RTL_DIR)/rv64xo3_hazard.sv \
+	$(RTL_DIR)/rv64xo3_hazard_sva.sv \
+	$(RTL_DIR)/rv64xo3_csr.sv \
+	$(RTL_DIR)/issue/rv64xo3_rename.sv \
+	$(RTL_DIR)/issue/rv64xo3_rs.sv \
+	$(RTL_DIR)/memory/rv64xo3_lsq.sv \
+	$(RTL_DIR)/commit/rv64xo3_rob.sv \
+	$(RTL_DIR)/rv64xo3_top.sv
 RTL_INCS := $(RTL_DIR)/include
 
-# Verilator flags
-VERILATOR_FLAGS := \
+# Simulator binary (Verilator C++ harness in tb/verilator/).
+# Canonical build rule: compliance suites and scripts/run_tests.sh use this.
+# Do not duplicate the verilator invocation elsewhere.
+SIM := $(BUILD_DIR)/obj_dir/rv64xo3_sim
+SIM_TB := $(TB_DIR)/verilator/tb_rv64xo3.cpp
+SIM_FLAGS := \
 	--cc \
 	--exe \
 	--build \
@@ -48,15 +57,27 @@ VERILATOR_FLAGS := \
 	-Wno-IMPORTSTAR \
 	--timing \
 	--coverage \
+	--top-module $(TOPLEVEL) \
 	-I$(RTL_INCS)
 
+# Verilator FST tracing needs lz4. On Apple Silicon Homebrew installs it
+# outside the default search path, so point Verilator's C++ build at it.
+ifeq ($(shell uname),Darwin)
+  BREW_PREFIX := $(shell brew --prefix 2>/dev/null)
+  ifneq ($(BREW_PREFIX),)
+    SIM_FLAGS += -CFLAGS -I$(BREW_PREFIX)/include -LDFLAGS -L$(BREW_PREFIX)/lib
+  endif
+endif
+
 # Verilator lint-only flags
+# UNUSEDPARAM waived: OoO params (ROB_SZ, PRF_SZ, ...) are API until wired in.
 VERILATOR_LINT_FLAGS := \
 	--lint-only \
 	-Wall \
 	-Wno-UNUSEDSIGNAL \
+	-Wno-UNUSEDPARAM \
 	-Wno-IMPORTSTAR \
-	--top-module ironcore_top \
+	--top-module rv64xo3_top \
 	-I$(RTL_INCS)
 
 # Verible lint rules configuration
@@ -72,21 +93,30 @@ all: lint unit
 # Help
 #------------------------------------------------------------------------------
 help:
-	@echo "IronCore RV64IM Processor - Build Targets"
+	@echo "riscv64xO3 RV64IMAC OoO Processor - Build Targets"
 	@echo "=========================================="
 	@echo ""
 	@echo "Quality Gates:"
 	@echo "  make lint       - Run Verible + Verilator linting"
 	@echo "  make format     - Format RTL with Verible"
+	@echo "  make check-docs - Run docs guardrails"
 	@echo ""
 	@echo "Testing:"
+	@echo "  make sim        - Build Verilator simulator binary"
 	@echo "  make unit       - Run unit tests"
 	@echo "  make cocotb     - Run cocotb integration tests"
-	@echo "  make compliance - Run RISC-V compliance tests"
+	@echo "  make compliance - Run RISC-V compliance tests (RV64)"
+	@echo "  make compliance-rv32 - Run legacy RV32 compliance baseline"
 	@echo "  make regress    - Full regression (lint + all tests)"
 	@echo ""
 	@echo "Synthesis:"
 	@echo "  make synth      - Run synthesis (Yosys)"
+	@echo "  make asic-feas  - OpenLane feasibility (see asic/)"
+	@echo ""
+	@echo "Docs:"
+	@echo "  make docs       - Build AsciiDoc manual to build/docs"
+	@echo "  make docs-clean - Remove built manual"
+	@echo "  make docs-open  - Serve built manual locally"
 	@echo ""
 	@echo "Development:"
 	@echo "  make waves      - Open waveform viewer"
@@ -133,6 +163,16 @@ format:
 	@echo "[FORMAT] Done"
 
 #------------------------------------------------------------------------------
+# Simulator (Verilator C++ harness)
+#------------------------------------------------------------------------------
+sim: $(SIM)
+
+$(SIM): $(RTL_SRCS) $(SIM_TB) | $(BUILD_DIR)
+	@echo "[SIM] Building Verilator simulator..."
+	$(VERILATOR) $(SIM_FLAGS) $(RTL_SRCS) $(SIM_TB) -o rv64xo3_sim --Mdir $(BUILD_DIR)/obj_dir
+	@echo "[SIM] Built $(SIM)"
+
+#------------------------------------------------------------------------------
 # Unit Tests
 #------------------------------------------------------------------------------
 unit: $(BUILD_DIR)
@@ -140,25 +180,36 @@ unit: $(BUILD_DIR)
 	@$(PYTEST) $(TB_DIR)/unit -v --tb=short --junitxml=$(BUILD_DIR)/unit-results.xml
 
 #------------------------------------------------------------------------------
-# Cocotb Integration Tests
+# Software (needs a bare-metal RISC-V toolchain in PATH; skipped by tests
+# that can run without it)
+#------------------------------------------------------------------------------
+sw:
+	@echo "[SW] Building hello world..."
+	@$(MAKE) -C $(SW_DIR)
+
+#------------------------------------------------------------------------------
+# Cocotb Integration Tests (cocotb 2.x pytest runner)
 #------------------------------------------------------------------------------
 cocotb: $(BUILD_DIR)
 	@echo "[TEST] Running cocotb tests..."
-	@$(MAKE) -C $(TB_DIR)/cocotb/alu
-	@$(MAKE) -C $(TB_DIR)/cocotb/decoder
-	@$(MAKE) -C $(TB_DIR)/cocotb/csr
+	@$(PYTEST) $(TB_DIR)/cocotb/cocotb_runner.py -v --tb=short --junitxml=$(BUILD_DIR)/cocotb-results.xml
 	@echo "[TEST] Cocotb tests complete"
 
 cocotb-smoke: $(BUILD_DIR)
 	@echo "[TEST] Running cocotb smoke tests..."
-	@$(MAKE) -C $(TB_DIR)/cocotb/alu
+	@$(PYTEST) $(TB_DIR)/cocotb/cocotb_runner.py -v -m smoke --tb=short --junitxml=$(BUILD_DIR)/cocotb-smoke-results.xml
 	@echo "[TEST] Cocotb smoke tests complete"
 
 #------------------------------------------------------------------------------
-# Compliance Tests
+# Compliance Tests (RV64 default; RV32 kept as legacy baseline)
 #------------------------------------------------------------------------------
-compliance: $(BUILD_DIR)
-	@echo "[TEST] Running RISC-V compliance tests..."
+compliance: sim
+	@echo "[TEST] Running RISC-V compliance tests (RV64)..."
+	@$(MAKE) -C $(TB_DIR)/compliance -f Makefile.rv64 run
+	@echo "[TEST] Compliance tests complete"
+
+compliance-rv32: sim
+	@echo "[TEST] Running RISC-V compliance tests (RV32 legacy)..."
 	@$(MAKE) -C $(TB_DIR)/compliance run
 	@echo "[TEST] Compliance tests complete"
 
@@ -176,6 +227,10 @@ regress: lint unit cocotb compliance
 synth: $(BUILD_DIR)
 	@echo "[SYNTH] Running Yosys synthesis..."
 	@$(MAKE) -C scripts/synth
+
+asic-feas: $(BUILD_DIR)
+	@echo "[ASIC] OpenLane feasibility (needs PDK image)..."
+	@$(MAKE) -C asic
 
 #------------------------------------------------------------------------------
 # Waveform Viewer
@@ -212,12 +267,36 @@ clean:
 	@echo "[CLEAN] Done"
 
 #------------------------------------------------------------------------------
+# Docs
+#------------------------------------------------------------------------------
+check-docs:
+	@echo "[DOCS] Running guardrails..."
+	@python3 tools/check_docs.py
+
+docs:
+	@echo "[DOCS] Building technical manual..."
+	@./scripts/build-docs.sh
+
+docs-clean:
+	@echo "[DOCS] Removing built manual..."
+	@rm -rf build/docs
+	@echo "[DOCS] Done"
+
+docs-open: docs
+	@echo "[DOCS] Serving manual at http://localhost:8000/ ..."
+	@python3 -m http.server 8000 --directory build/docs
+
+#------------------------------------------------------------------------------
 # Docker
 #------------------------------------------------------------------------------
 docker-build:
 	@echo "[DOCKER] Building development container..."
-	@docker build -t ironcore-dev .
+	@docker build -f docker/Dockerfile.dev -t rv64xo3-dev .
+
+docker-ci-build:
+	@echo "[DOCKER] Building CI container..."
+	@docker build -f docker/Dockerfile.ci -t rv64xo3-ci .
 
 docker-shell:
 	@echo "[DOCKER] Launching interactive shell..."
-	@docker run -it --rm -v $(PWD):/workspace ironcore-dev
+	@docker run -it --rm -v $(PWD):/workspace rv64xo3-dev
