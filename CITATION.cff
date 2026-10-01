@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+title: riscv64xO3
+message: If you use this work, please cite it as below.
+type: software
+authors:
+  - family-names: Marhguy
+    given-names: Tyrone
+    email: tmarhguy@gmail.com
+    affiliation: University of Pennsylvania
+repository-code: https://github.com/tmarhguy/riscv
+license: MIT
+keywords:
+  - risc-v
+  - out-of-order
+  - superscalar
+  - computer-architecture
