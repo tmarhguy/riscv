@@ -1,5 +1,5 @@
 /*
- * IronCore UART Driver
+ * riscv64xO3 UART Driver
  * Simple memory-mapped UART for bare-metal output
  */
 

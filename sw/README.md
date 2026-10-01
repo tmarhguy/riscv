@@ -1,6 +1,6 @@
 # Software Directory (sw)
 
-This directory contains bare-metal software tests and runtime support for the IronCore processor.
+This directory contains bare-metal software tests and runtime support for the riscv64xO3 processor.
 
 ## Purpose
 To provide C and Assembly test cases that verify the processor's ability to execute compiled code and interact with peripherals.

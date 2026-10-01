@@ -1,4 +1,4 @@
-/* IronCore Linker Script
+/* riscv64xO3 Linker Script
  * Memory layout for bare-metal RV32IM
  */
 

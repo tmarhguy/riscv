@@ -1,4 +1,4 @@
-# IronCore C Runtime Startup for RV64
+# riscv64xO3 C Runtime Startup for RV64
 # Minimal startup code for bare-metal RV64IM
 
 .section .text.init

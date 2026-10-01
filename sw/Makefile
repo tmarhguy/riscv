@@ -1,4 +1,4 @@
-# IronCore Software Build
+# riscv64xO3 Software Build
 # Compiles bare-metal C programs for RV32IM
 
 # Toolchain

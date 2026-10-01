@@ -1,4 +1,4 @@
-/* IronCore Linker Script for RV64
+/* riscv64xO3 Linker Script for RV64
  * Code and Data in RAM at 0x80000000
  */
 

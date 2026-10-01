@@ -1,5 +1,5 @@
 /*
- * Dhrystone Benchmark for IronCore RV32IM
+ * Dhrystone Benchmark for riscv64xO3 RV32IM
  * Adapted for bare-metal execution
  */
 

@@ -1,5 +1,5 @@
 /*
- * IronCore Demo Program
+ * riscv64xO3 Demo Program
  * Simple "Hello World" for bare-metal RV32IM
  */
 
@@ -8,7 +8,7 @@
 int main(void) {
     uart_init();
 
-    uart_puts("Hello IronCore!\r\n");
+    uart_puts("Hello riscv64xO3!\r\n");
     uart_puts("RV32IM 5-Stage Pipeline\r\n");
     uart_puts("========================\r\n");
 

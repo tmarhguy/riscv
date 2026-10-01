@@ -1,6 +1,6 @@
-# IronCore Benchmark Infrastructure
+# riscv64xO3 Benchmark Infrastructure
 
-This directory contains benchmark programs for measuring IronCore performance.
+This directory contains benchmark programs for measuring riscv64xO3 performance.
 
 ## Benchmarks
 

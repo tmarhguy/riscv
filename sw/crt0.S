@@ -1,4 +1,4 @@
-# IronCore C Runtime Startup
+# riscv64xO3 C Runtime Startup
 # Minimal startup code for bare-metal RV32IM
 
 .section .text.init
