@@ -1,4 +1,4 @@
-= riscv64xO3 Technical Reference Manual
+= riscv64xO3: 64-bit Out-of-Order Superscalar RISC-V Core (RV64IMAC) — Technical Reference Manual
 :toc: left
 :toclevels: 3
 :sectnums:
@@ -20,7 +20,8 @@
 // Each chapter is one file under sections/ starting with '== Title'.
 
 [.lead]
-A 64-bit superscalar out-of-order RISC-V core, from RTL to silicon feasibility.
+A 64-bit out-of-order superscalar RISC-V core (RV64IMAC target),
+from RTL to silicon feasibility.
 
 Authority: `rtl/` SystemVerilog wins over this prose.
 Current facts: <<ch-intro>> and <<ch-limit>>.
