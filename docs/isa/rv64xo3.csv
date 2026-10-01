@@ -1,0 +1,77 @@
+opcode,funct3,funct7/instr,name,class,description
+0110111,---,---,LUI,RV64I,Load upper immediate
+0010111,---,---,AUIPC,RV64I,Add upper immediate to PC
+1101111,---,---,JAL,RV64I,Jump and link
+1100111,000,---,JALR,RV64I,Jump and link register
+1100011,000,---,BEQ,RV64I,Branch if equal
+1100011,001,---,BNE,RV64I,Branch if not equal
+1100011,100,---,BLT,RV64I,Branch if less than (signed)
+1100011,101,---,BGE,RV64I,Branch if greater-equal (signed)
+1100011,110,---,BLTU,RV64I,Branch if less than (unsigned)
+1100011,111,---,BGEU,RV64I,Branch if greater-equal (unsigned)
+0000011,000,---,LB,RV64I,Load byte (sign-extended)
+0000011,001,---,LH,RV64I,Load halfword (sign-extended)
+0000011,010,---,LW,RV64I,Load word (sign-extended)
+0000011,011,---,LD,RV64I,Load doubleword
+0000011,100,---,LBU,RV64I,Load byte unsigned
+0000011,101,---,LHU,RV64I,Load halfword unsigned
+0000011,110,---,LWU,RV64I,Load word unsigned
+0100011,000,---,SB,RV64I,Store byte
+0100011,001,---,SH,RV64I,Store halfword
+0100011,010,---,SW,RV64I,Store word
+0100011,011,---,SD,RV64I,Store doubleword
+0010011,000,---,ADDI,RV64I,Add immediate
+0010011,010,---,SLTI,RV64I,Set less-than immediate (signed)
+0010011,011,---,SLTIU,RV64I,Set less-than immediate (unsigned)
+0010011,100,---,XORI,RV64I,XOR immediate
+0010011,110,---,ORI,RV64I,OR immediate
+0010011,111,---,ANDI,RV64I,AND immediate
+0010011,001,0000000,SLLI,RV64I,Shift left logical immediate
+0010011,101,0000000,SRLI,RV64I,Shift right logical immediate
+0010011,101,0100000,SRAI,RV64I,Shift right arithmetic immediate
+0110011,000,0000000,ADD,RV64I,Add
+0110011,000,0100000,SUB,RV64I,Subtract
+0110011,001,0000000,SLL,RV64I,Shift left logical
+0110011,010,0000000,SLT,RV64I,Set less-than (signed)
+0110011,011,0000000,SLTU,RV64I,Set less-than (unsigned)
+0110011,100,0000000,XOR,RV64I,XOR
+0110011,101,0000000,SRL,RV64I,Shift right logical
+0110011,101,0100000,SRA,RV64I,Shift right arithmetic
+0110011,110,0000000,OR,RV64I,OR
+0110011,111,0000000,AND,RV64I,AND
+0011011,000,---,ADDIW,RV64I,Add immediate word
+0011011,001,0000000,SLLIW,RV64I,Shift left logical word immediate
+0011011,101,0000000,SRLIW,RV64I,Shift right logical word immediate
+0011011,101,0100000,SRAIW,RV64I,Shift right arithmetic word immediate
+0111011,000,0000000,ADDW,RV64I,Add word
+0111011,000,0100000,SUBW,RV64I,Subtract word
+0111011,001,0000000,SLLW,RV64I,Shift left logical word
+0111011,101,0000000,SRLW,RV64I,Shift right logical word
+0111011,101,0100000,SRAW,RV64I,Shift right arithmetic word
+0001111,000,---,FENCE,RV64I,Memory fence
+0001111,001,---,FENCE.I,RV64I,Instruction fence
+1110011,000,0000000,ECALL,RV64I,Environment call
+1110011,000,0000001,EBREAK,RV64I,Breakpoint
+1110011,001,---,CSRRW,Zicsr,CSR read/write
+1110011,010,---,CSRRS,Zicsr,CSR read/set
+1110011,011,---,CSRRRC,Zicsr,CSR read/clear
+0110011,000,0000001,MUL,RV64M,Multiply low
+0110011,001,0000001,MULH,RV64M,Multiply high (signed)
+0110011,010,0000001,MULHSU,RV64M,Multiply high (signed/unsigned)
+0110011,011,0000001,MULHU,RV64M,Multiply high (unsigned)
+0110011,100,0000001,DIV,RV64M,Divide (signed)
+0110011,101,0000001,DIVU,RV64M,Divide (unsigned)
+0110011,110,0000001,REM,RV64M,Remainder (signed)
+0110011,111,0000001,REMU,RV64M,Remainder (unsigned)
+0111011,000,0000001,MULW,RV64M,Multiply word
+0111011,100,0000001,DIVW,RV64M,Divide word (signed)
+0111011,101,0000001,DIVUW,RV64M,Divide word (unsigned)
+0111011,110,0000001,REMW,RV64M,Remainder word (signed)
+0111011,111,0000001,REMUW,RV64M,Remainder word (unsigned)
+0101111,010,---,LR.W,A,Load-reserved word
+0101111,011,---,SC.W,A,Store-conditional word
+0101111,011,---,LR.D,A,Load-reserved doubleword
+0101111,011,---,SC.D,A,Store-conditional doubleword
+0101111,010,---,AMOSWAP.*,A,Atomic swap (W/D)
+0101111,010,---,AMOADD.*,A,Atomic add (W/D)
+00-----------,---,---,C.*,C,Compressed 16-bit (bring-up)
