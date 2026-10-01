@@ -463,31 +463,6 @@ module rv64xo3_top #(
   // Trap logic
   assign trap_taken = exc_valid;
   assign mret_taken = id_ex_reg.valid && id_ex_reg.is_mret;
-`ifndef SYNTHESIS
-  // Temporary Phase-0 tracer
-  always @(posedge clk_i) begin
-    if (rst_ni && (trap_taken || mret_taken || pc_redirect)) begin
-      $display("[RED] trap=%0d(%0h) mret=%0d predmiss=%0d jal=%0d tgt=%0h id=%0h(%0d) ex=%0h(%0d) ill=%0d ec=%0d eb=%0d ifinstr=%08h memv=%0d memexc=%0d",
-               trap_taken, exc_cause, mret_taken, pred_miss,
-               (id_ex_reg.valid && (id_ex_reg.is_jal || id_ex_reg.is_jalr)),
-               pc_redirect_target, if_id_reg.pc, if_id_reg.valid,
-               id_ex_reg.pc, id_ex_reg.valid, id_ex_reg.illegal_instr,
-               id_ex_reg.is_ecall, id_ex_reg.is_ebreak, if_id_reg.instr,
-               mem_exc_valid, ex_mem_reg.valid);
-    end
-    if (rst_ni && id_ex_reg.illegal_instr) begin
-      $display("[ILL] idex pc=%0h valid=%0d ifid pc=%0h valid=%0d instr=%08h",
-               id_ex_reg.pc, id_ex_reg.valid, if_id_reg.pc, if_id_reg.valid,
-               if_id_reg.instr);
-    end
-  end
-    if (rst_ni && id_ex_reg.illegal_instr) begin
-      $display("[ILL] idex pc=%0h valid=%0d ifid pc=%0h valid=%0d instr=%08h",
-               id_ex_reg.pc, id_ex_reg.valid, if_id_reg.pc, if_id_reg.valid,
-               if_id_reg.instr);
-    end
-  end
-`endif
 
   // Exception detection
   // Priority: Memory exceptions (MEM stage) > EX stage exceptions.
