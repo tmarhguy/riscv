@@ -1,6 +1,6 @@
 # Scripts Directory
 
-This directory contains utility scripts for building, testing, and synthesizing the IronCore processor.
+This directory contains utility scripts for building, testing, and synthesizing the riscv64xO3 processor.
 
 ## Key Scripts
 

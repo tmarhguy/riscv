@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Coverage Report Generator for IronCore RV32IM Processor
+Coverage Report Generator for riscv64xO3 RV32IM Processor
 
 Parses Verilator coverage.dat file and generates human-readable
 coverage reports with line and toggle coverage percentages.
@@ -106,7 +106,7 @@ def generate_markdown_report(coverage_data):
     """Generate markdown-formatted coverage report."""
     
     report = []
-    report.append("# IronCore RV32IM Coverage Report\n")
+    report.append("# riscv64xO3 RV32IM Coverage Report\n")
     report.append("*Auto-generated from Verilator coverage data*\n")
     
     # Overall Summary

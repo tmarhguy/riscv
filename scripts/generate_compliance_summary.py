@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Compliance Test Summary Generator for IronCore RV32IM Processor
+Compliance Test Summary Generator for riscv64xO3 RV32IM Processor
 
 Scans compliance test logs and generates a summary report with
 pass/fail statistics and detailed test results.
@@ -67,7 +67,7 @@ def generate_markdown_summary(results):
     """Generate markdown-formatted compliance summary."""
     
     report = []
-    report.append("# IronCore Compliance Test Summary (RV32IM Subset)\n")
+    report.append("# riscv64xO3 Compliance Test Summary (RV32IM Subset)\n")
     report.append("*Auto-generated from RISC-V compliance test logs*\n")
     
     # Calculate totals
@@ -163,7 +163,7 @@ def generate_markdown_summary(results):
     report.append("## Compliance Information\n")
     report.append("These tests are from the official RISC-V architectural test suite ")
     report.append("(`riscv-tests`), which verifies ISA compliance against the RISC-V ")
-    report.append("specification. Passing these tests demonstrates that IronCore correctly ")
+    report.append("specification. Passing these tests demonstrates that riscv64xO3 correctly ")
     report.append("implements the RV32IM subset of the supported RV64IM architecture.\n")
     
     # Generation Info

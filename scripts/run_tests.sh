@@ -1,5 +1,5 @@
 #!/bin/bash
-# IronCore Test Runner
+# riscv64xO3 Test Runner
 # Builds and runs verification tests
 
 set -e
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$ROOT_DIR/build"
 TEST_DIR="$ROOT_DIR/tb/asm"
-SIM="$BUILD_DIR/obj_dir/ironcore_sim"
+SIM="$BUILD_DIR/obj_dir/rv64xo3_sim"
 
 # Colors
 RED='\033[0;31m'
@@ -17,7 +17,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 echo "=========================================="
-echo "IronCore Verification Test Suite"
+echo "riscv64xO3 Verification Test Suite"
 echo "=========================================="
 
 # Check for RISC-V toolchain
@@ -36,35 +36,10 @@ else
     export CROSS_PREFIX=riscv-none-elf-
 fi
 
-# Build simulator using project Makefile
+# Build simulator using the canonical project target (see root Makefile `sim`).
 echo "Building simulator..."
 # Skip verible lint as it's not installed in this environment
-make -C "$ROOT_DIR" lint-verilator
-# Ensure SIM binary exists (built by verilator command in Makefile or implicit)
-# The root Makefile doesn't have explicit 'sim' target but 'lint' and 'verilator' flags.
-# We call the verilator command manually or via a new target if we added one. 
-# Re-using the direct verilator call consistent with Makefile settings:
-cd "$ROOT_DIR"
-rm -rf build/obj_dir
-verilator --cc --exe --build -j 0 --trace-fst --assert \
-    -Wall -Wno-fatal -Wno-IMPORTSTAR --timing --coverage \
-    --top-module ironcore_top \
-    -Irtl/include \
-    rtl/include/ironcore_pkg.sv \
-    rtl/ironcore_alu.sv \
-    rtl/ironcore_muldiv.sv \
-    rtl/ironcore_decoder.sv \
-    rtl/ironcore_if.sv \
-    rtl/ironcore_id.sv \
-    rtl/ironcore_ex.sv \
-    rtl/ironcore_mem.sv \
-    rtl/ironcore_bp.sv \
-    rtl/ironcore_hazard.sv \
-    rtl/ironcore_csr.sv \
-    rtl/ironcore_top.sv \
-    tb/verilator/tb_ironcore.cpp \
-    -o ironcore_sim \
-    --Mdir build/obj_dir > /dev/null
+make -C "$ROOT_DIR" lint-verilator sim
 
 if [ ! -f "$SIM" ]; then
     echo -e "${RED}Error: Simulator build failed${NC}"

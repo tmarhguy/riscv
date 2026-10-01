@@ -1,24 +1,29 @@
-# IronCore Synthesis Scripts
+# riscv64xO3 Synthesis Scripts
 # Yosys-based synthesis for area/timing estimates
 
-DESIGN = ironcore_top
+DESIGN = rv64xo3_top
 RTL_DIR = ../../rtl
 BUILD_DIR = build
 
 # RTL sources
 SRCS = \
-	$(RTL_DIR)/include/ironcore_pkg.sv \
-	$(RTL_DIR)/ironcore_alu.sv \
-	$(RTL_DIR)/ironcore_muldiv.sv \
-	$(RTL_DIR)/ironcore_decoder.sv \
-	$(RTL_DIR)/ironcore_if.sv \
-	$(RTL_DIR)/ironcore_id.sv \
-	$(RTL_DIR)/ironcore_ex.sv \
-	$(RTL_DIR)/ironcore_mem.sv \
-	$(RTL_DIR)/ironcore_bp.sv \
-	$(RTL_DIR)/ironcore_hazard.sv \
-	$(RTL_DIR)/ironcore_csr.sv \
-	$(RTL_DIR)/ironcore_top.sv
+	$(RTL_DIR)/include/rv64xo3_pkg.sv \
+	$(RTL_DIR)/rv64xo3_alu.sv \
+	$(RTL_DIR)/rv64xo3_muldiv.sv \
+	$(RTL_DIR)/rv64xo3_decoder.sv \
+	$(RTL_DIR)/rv64xo3_if.sv \
+	$(RTL_DIR)/rv64xo3_id.sv \
+	$(RTL_DIR)/rv64xo3_ex.sv \
+	$(RTL_DIR)/rv64xo3_mem.sv \
+	$(RTL_DIR)/rv64xo3_bp.sv \
+	$(RTL_DIR)/rv64xo3_hazard.sv \
+	$(RTL_DIR)/rv64xo3_hazard_sva.sv \
+	$(RTL_DIR)/rv64xo3_csr.sv \
+	$(RTL_DIR)/issue/rv64xo3_rename.sv \
+	$(RTL_DIR)/issue/rv64xo3_rs.sv \
+	$(RTL_DIR)/memory/rv64xo3_lsq.sv \
+	$(RTL_DIR)/commit/rv64xo3_rob.sv \
+	$(RTL_DIR)/rv64xo3_top.sv
 
 .PHONY: all clean yosys-synth report
 

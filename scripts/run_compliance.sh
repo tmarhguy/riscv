@@ -1,5 +1,5 @@
 #!/bin/bash
-SIM=./build/obj_dir/ironcore_sim
+SIM=./build/obj_dir/rv64xo3_sim
 TESTS_DIR=tb/compliance/build
 LOG_DIR=logs/compliance
 mkdir -p $LOG_DIR
