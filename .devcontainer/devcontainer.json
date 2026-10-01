@@ -1,7 +1,7 @@
 {
-  "name": "IronCore RV32IM Dev Environment",
+  "name": "riscv64xO3 RV64IMAC Dev Environment",
   "build": {
-    "dockerfile": "../Dockerfile",
+    "dockerfile": "../docker/Dockerfile.dev",
     "context": ".."
   },
   "customizations": {

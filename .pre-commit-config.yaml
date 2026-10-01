@@ -1,46 +1,68 @@
-# IronCore Pre-commit Hooks
+# riscv64xO3 Pre-commit Hooks
 # See https://pre-commit.com for more information
+# Scopes follow `type(scope): subject` (feat, fix, docs, test, chore, web, rtl, asic).
+# Run: pre-commit install && pre-commit run --all-files
+# If Verible isn't installed locally: SKIP=verible-format,verible-lint git commit
+# (CI enforces the same via `make lint` in .github/workflows/rtl.yml)
+
+fail_fast: false
+minimum_pre_commit_version: "3.2.0"
+
+# Generated / vendored paths never need hooks. Binary sim outputs (*.fst/*.vcd)
+# stay gitignored; whitespace hooks exclude them per-hook below so the
+# large-files guard can still catch a forced add.
+exclude: >
+  ^(?:
+    build/|obj_dir/|waves/|
+    web/dist/|web/node_modules/|
+    asic/runs/|asic/logs/|asic/reports/|
+    sim_build/|\.pytest_cache/|__pycache__/
+  )
 
 repos:
-  # Verible SystemVerilog formatter
+  # Local toolchain: Verible (matches `make lint` / `make format`) + docs guardrails
+  # (matches `make check-docs` and docs.yml CI). Kept in one block.
   - repo: local
     hooks:
       - id: verible-format
         name: Verible Format
         entry: verible-verilog-format --inplace
         language: system
-        files: \.(sv|v)$
-        types: [file]
-
-  # Verible SystemVerilog linter
-  - repo: local
-    hooks:
+        files: \.(sv|svh|v)$
       - id: verible-lint
         name: Verible Lint
         entry: verible-verilog-lint
         language: system
-        files: \.(sv|v)$
-        types: [file]
+        files: \.(sv|svh|v)$
         args: [-rules=-line-length]
+      - id: check-docs
+        name: Docs guardrails
+        entry: python3 tools/check_docs.py
+        language: system
+        files: \.(md|html)$
+        pass_filenames: false
 
-  # Python formatting with Ruff
+  # Python lint + format (keep rev in sync with ruff pin in requirements.txt)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.16.6
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
 
-  # Whitespace hygiene
+  # Whitespace / hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: \.(fst|vcd)$
       - id: end-of-file-fixer
         exclude: \.(fst|vcd)$
       - id: check-yaml
-      - id: check-added-large-files
-        args: ['--maxkb=1000']
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
       - id: mixed-line-ending
         args: ['--fix=lf']
+      - id: check-added-large-files
+        args: ['--maxkb=1000']

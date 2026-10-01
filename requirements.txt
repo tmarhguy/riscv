@@ -1,16 +1,15 @@
-# IronCore Python Dependencies
+# riscv64xO3 Python Dependencies
 # Pinned for reproducibility
 
-# Verification framework
-cocotb==1.9.0
-cocotb-bus==0.2.1
-cocotb-test==0.2.5
-pytest==8.3.3
-pytest-xdist==3.5.0
+# Verification framework (cocotb 1.9 stuck on old build backend; 2.x verified locally)
+cocotb>=1.9.0
+cocotb-bus>=0.2.1
+pytest>=8.0.0
+pytest-xdist>=3.5.0
 
-# Code quality
-ruff==0.6.9
-pre-commit==3.8.0
+# Code quality (keep ruff in sync with .pre-commit-config.yaml)
+ruff==0.16.6
+pre-commit==4.6.2
 
 # Utilities
 pyyaml==6.0.2
