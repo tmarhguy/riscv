@@ -16,7 +16,8 @@ optimistic reading of earlier chapters.
 
 * A and C extensions are in bring-up, not verified.
 * No instruction/data caches; AXI4-Lite latency bounds IPC.
-* No hardware misaligned-access fixup; traps only.
+* Misaligned data accesses are handled in hardware (split bus
+  transactions, no trap); misaligned instruction-fetch targets still trap.
 * FPGA prototype mapping does not exist yet.
 * ASIC work is feasibility smoke (Yosys + OpenLane2), not a tapeout.
 * CoreMark and FPGA synthesis numbers are pending.
