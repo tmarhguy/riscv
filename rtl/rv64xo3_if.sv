@@ -141,7 +141,8 @@ module rv64xo3_if #(
     end else if (iwb_ack_i && stall_i) begin
       // Buffer instruction if downstream is stalled.
       // NOTE: 64-bit bus carries one 32-bit parcel in the low word; pc[2]
-      // word-mux lands with the RVC expander (see docs/architecture.md).
+      // word-mux lands with the RVC expander (see
+      // docs/sections/05-programming-model.adoc).
       instr_buf       <= iwb_dat_i[31:0];
       instr_buf_valid <= 1'b1;
     end else if (!stall_i && instr_buf_valid) begin

@@ -3,7 +3,8 @@
 
 The core is AXI4-Lite native on both instruction and data ports.
 There is no Wishbone in the core path; the legacy `wb_to_axi4lite`
-bridge is retained only under `rtl/axi/` for UART and debug bring-up.
+bridge (`rtl/wb_to_axi4lite.sv`) is retained only for UART and debug
+bring-up.
 
 === Bus architecture
 
@@ -27,9 +28,10 @@ bridge is retained only under `rtl/axi/` for UART and debug bring-up.
 |===
 | Item | Value
 | Clocking | Single clock domain
-| Reset | Synchronous; PC loads `RESET_PC = 0x8000_0000`
-| Privilege | M-mode only
-| Misaligned access | Precise trap, no hardware fixup
+| Reset | Synchronous; core PC loads `RESET_PC` (default `0x8000_0000`, re-parameterizable per wrapper)
+| Privilege | M-mode trap handling; supervisor CSR shadows and `sret` present
+| Misaligned data | Split in hardware across bus transactions, never traps
+| Misaligned fetch target | Precise trap
 |===
 
 TIP: Bare-metal programs link against `sw/link64.ld` with the reset
@@ -40,5 +42,5 @@ See <<ch-impl>> for the software flow.
 
 * `tb/tb_uart_axi.sv` and `rtl/uart_axi.sv` cover the UART path.
 * The `hello.c` end-to-end demo exercises UART output through the bridge.
-* Assertions for bus handshakes (for example `STB` implies `CYC`)
-  are documented in <<ch-verif>>.
+* Handshake, mutual-exclusion, and trap-entry assertions are documented
+  in <<ch-verif>>.

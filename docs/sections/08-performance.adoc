@@ -13,7 +13,7 @@ They describe the model, not silicon or a board.
 |===
 | Metric | Value
 | Cycles per run | 1174
-| DMIPS/MHz | 0.49
+| DMIPS/MHz | 0.48
 | IPC | TBD (counter issue in the measured run)
 |===
 

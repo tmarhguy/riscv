@@ -6,11 +6,12 @@ This chapter describes the microarchitecture behind the pipeline in
 
 === Fetch (IF)
 
-Sources: `rtl/frontend/`, `rtl/rv64xo3_bp.sv`, `rtl/rv64xo3_if.sv`.
+Sources: `rtl/rv64xo3_if.sv`, `rtl/rv64xo3_bp.sv`.
 
-* 2-wide fetch on a 4-byte-aligned PC, with an RVC expander (bring-up)
-  for 16-bit parcels.
-* gshare + BTB + RAS prediction as described in <<ch-arch>>.
+* 2-wide fetch on a 4-byte-aligned PC with an instruction buffer for
+  downstream stalls. The fetch path is 32-bit today; RVC expansion is
+  planned.
+* Bimodal direction prediction as described in <<ch-arch>>.
 * Instruction memory reached through the AXI4-Lite master;
   `fetch_stall` asserts on miss.
 
@@ -38,10 +39,12 @@ Sources: `rtl/rv64xo3_id.sv`, `rtl/issue/rv64xo3_rename.sv`, `rtl/rv64xo3_decode
 
 === Issue and execute (IS)
 
-Sources: `rtl/issue/rv64xo3_rs.sv`, `rtl/execute/`, `rtl/rv64xo3_ex.sv`.
+Sources: `rtl/issue/rv64xo3_rs.sv`, `rtl/rv64xo3_ex.sv`, `rtl/rv64xo3_alu.sv`, `rtl/rv64xo3_muldiv.sv`.
 
-* Tomasulo wakeup/select across two single-cycle ALUs, one 3-stage
-  pipelined multiplier, one shared iterative divider, and two CDBs.
+* One single-cycle combinational ALU plus a shared multi-cycle
+  multiply/divide unit (compute states with an iterative divider).
+* Reservation stations expose CDB tag/valid ports; tag RAM, ready
+  bits, oldest-ready select, and broadcast are TODO scaffolding.
 * Branch resolution in execute triggers flush and map-table restore.
 
 The ALU operation set (from `rtl/include/rv64xo3_pkg.sv`):
@@ -59,11 +62,16 @@ typedef enum logic [4:0] {
 
 Sources: `rtl/memory/rv64xo3_lsq.sv`, `rtl/rv64xo3_mem.sv`.
 
-* Store-to-load forwarding inside the LSQ; the store queue drains at commit.
-* Misaligned loads and stores raise traps instead of being fixed up.
+* The bus moves one 4-byte-aligned word per transaction. Accesses up
+  to 8 bytes that cross the word boundary are split in hardware into
+  at most two transactions, so data misalignment never traps.
+* No MEM exception source remains: bus faults are not modeled and the
+  exception ports are tied off for future PMP/bus-error use.
+* The LSQ (`rtl/memory/rv64xo3_lsq.sv`) is scaffolding: ready/forward
+  ports exist, address CAM, store-set prediction, and AXI issue are TODO.
 
-WARNING: There is no hardware misaligned-access fixup.
-Software or the trap handler must handle such cases.
+NOTE: Data misalignment is split in hardware. Only misaligned
+instruction-fetch targets trap.
 
 === Commit (CM)
 

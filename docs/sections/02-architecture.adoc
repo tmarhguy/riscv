@@ -30,22 +30,25 @@ See <<ch-design>> for stage internals and <<ch-if>> for bus behavior.
 | `PRF_SZ` | 96 | Physical registers (32 arch {rightarrow} 96 phys)
 | `RS_ALU_SZ` / `RS_MUL_SZ` / `RS_LSU_SZ` | 8 / 4 / 4 | Reservation stations
 | `LSQ_SZ` | 16 | Load-store queue
-| `RESET_PC` | `0x8000_0000` | Reset vector
+| `RESET_PC` | `0x8000_0000` | Core default (`rv64xo3_top`/`rv64xo3_if` parameter; the AXI system wrapper re-parameterizes it)
 |===
 
 === Branch prediction
 
-* gshare predictor with 8K-entry pattern history table.
-* 1K-entry branch target buffer plus 16-entry return-address stack.
-* BTB miss predicts not-taken; resolution happens in execute.
+* Bimodal predictor: 256-entry branch history table of 2-bit saturating
+  counters, indexed by PC bits, initialized weakly not taken.
+* `JAL` is always predicted taken with a computed target; conditional
+  branches use the counter's taken bit.
+* Updates come from the execute stage; resolution happens in execute.
 * Mispredict flushes instructions younger than the ROB branch entry and
-  restores the rename checkpoint. Sources: `rtl/rv64xo3_bp.sv`, `rtl/frontend/`.
+  restores the rename checkpoint. Source: `rtl/rv64xo3_bp.sv`.
 
 === Memory and commit model
 
-* 16-entry LSQ with store-to-load forwarding; stores drain at commit.
-* Speculative loads guarded by a conservative store-set conflict predictor.
-* AXI4-Lite instruction and data masters; misaligned accesses trap,
-  there is no hardware fixup. See <<ch-if>>.
+* 16-entry LSQ (scaffolding): ready/forward ports exist, but address
+  matching, store-set prediction, and AXI issue are TODO.
+* AXI4-Lite instruction and data masters; data misalignment is split
+  in hardware (see <<ch-design>>), misaligned fetch targets trap.
+  See <<ch-if>>.
 * CSR, `mret`, `ecall`, and `ebreak` retire at the ROB head only,
   giving precise M-mode traps (`mepc`/`mcause`/`mtval` set, redirect to `mtvec`).

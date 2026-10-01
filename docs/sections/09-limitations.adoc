@@ -15,6 +15,7 @@ optimistic reading of earlier chapters.
 === Open items
 
 * A and C extensions are in bring-up, not verified.
+* No PMP unit (`pmpaddr` unimplemented).
 * No instruction/data caches; AXI4-Lite latency bounds IPC.
 * Misaligned data accesses are handled in hardware (split bus
   transactions, no trap); misaligned instruction-fetch targets still trap.

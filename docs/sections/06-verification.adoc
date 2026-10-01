@@ -14,7 +14,7 @@ under Verilator.
 | Unit (pytest) | `tb/unit/` | ALU, decoder, CSR, MulDiv, memory in isolation
 | Integration (cocotb) | `tb/cocotb/` | Pipeline interaction, hazards, bus models
 | Compliance | `tb/compliance/Makefile.rv64` | Official `riscv-tests` RV64 suites
-| Formal / SVA | `tb/formal/`, `rtl/rv64xo3_hazard_sva.sv` | 12 assertions: x0, PC/mutual-exclusion, handshake liveness
+| Formal / SVA | `rtl/rv64xo3_top.sv`, `rtl/rv64xo3_hazard_sva.sv` | 14 assert properties: x0, PC/mutual-exclusion, handshake liveness (`tb/formal/` reserved, empty)
 |===
 
 Directed tests cover corner cases (divide-by-zero, mixed signs,
@@ -24,11 +24,18 @@ the AXI4-Lite interfaces.
 
 === Current results
 
-* Historical RV32UI/UM baseline: *100%* (37/37, 8/8) as a reference point.
-* Canonical target: RV64UI/UM/UC via `tb/compliance/Makefile.rv64`.
-* Line coverage ~61% and toggle coverage ~62% in the generated reports;
-  per-module highs include hazard, decoder, ALU, and CSR paths.
-  Coverage is in progress toward PRD targets (>=95% line, >=80% toggle).
+Phase 0 baseline (`docs/log/2026-10-01-phase0-foundation.md`,
+riscv-tests submodule @ `7af6beb`):
+
+* `make compliance` (RV64 default): RV64UI *54/54*, RV64UM *13/13*,
+  RV64MI *15/15* (includes `ma_addr`, `ma_fetch`, misaligned family, `sbreak`).
+* Legacy baselines: RV32UI 37/37 + RV32UM 8/8 (`make compliance-rv32`),
+  legacy asm 8/8, C++ harness suites 15/15.
+* `make unit`: 58 passed. `make cocotb`: 7 passed
+  (ALU, decoder, CSR, memory, MulDiv, AXI IMEM+DMEM, top).
+* Line/toggle coverage is collected with Verilator and tracked toward
+  PRD targets (>=95% line, >=80% toggle); regenerate with
+  `scripts/generate_coverage_report.py` rather than quoting old figures.
 
 NOTE: Numbers here describe RTL simulation only.
 See <<ch-limit>> for what simulation evidence does and does not prove.

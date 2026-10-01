@@ -20,6 +20,7 @@ Machine-readable contract: `docs/isa/rv64xo3.csv`
 The full opcode map covers integer computation (immediate and
 register-register), control transfer, loads/stores, `AUIPC`/`LUI`,
 system, and fence encodings. Illegal encodings trap precisely.
+`FENCE` and `FENCE.I` decode as NOPs (single in-order pipe, no caches).
 
 === Control and status registers
 
@@ -38,7 +39,9 @@ system, and fence encodings. Illegal encodings trap precisely.
 |===
 
 CSR instructions `CSRRW/CSRRS/CSRRC` and immediates are supported,
-including masked writes. `mret` restores the pre-trap PC.
+including masked writes. `mret` restores the pre-trap PC; `sret` is
+supported alongside the supervisor CSR shadows. `misa` reports MXL=2
+with I+M only.
 
 === Traps and exceptions
 
