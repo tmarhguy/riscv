@@ -1,0 +1,117 @@
+/* Technical manual navigation overrides.
+ *
+ * This file only contains overrides and additions on top of the
+ * Asciidoctor built-in HTML5 stylesheet. It does not fork or replace it.
+ * Generic: no project names, usable across repositories.
+ */
+
+/* -- Sidebar controls (Collapse all / Expand all) --------------------- */
+#toc .toc-controls {
+  display: flex;
+  gap: 0.5em;
+  padding: 0.4em 0.75em 0.6em;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+#toc .toc-controls button {
+  font-size: 0.78em;
+  padding: 0.15em 0.6em;
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  color: #555;
+  cursor: pointer;
+}
+
+#toc .toc-controls button:hover {
+  background: #f0f0f0;
+  color: #111;
+}
+
+/* -- Disclosure (expand/collapse) buttons ------------------------------
+ * Buttons are inserted by nav.js as the first child of TOC list items
+ * that own a nested list. Title links are untouched and keep working
+ * with or without JavaScript. Collapsing styles only apply under
+ * .js-nav so the no-JS fallback stays fully expanded.
+ */
+#toc .toc-disclosure {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.15em;
+  margin-right: 0.15em;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #777;
+  font-size: 0.85em;
+  line-height: 1.4;
+  vertical-align: baseline;
+}
+
+#toc .toc-disclosure:hover {
+  color: #111;
+}
+
+/* Hide nested lists of collapsed items (JS only). */
+.js-nav #toc li.toc-collapsed > ul {
+  display: none;
+}
+
+/* -- Active section --------------------------------------------------- */
+#toc a.toc-active {
+  font-weight: bold;
+  color: #111;
+  background: #eef3f7;
+  border-radius: 3px;
+}
+
+/* -- Sidebar scrolling -------------------------------------------------
+ * Asciidoctor already fixes the left TOC; this only guarantees the
+ * sidebar scrolls independently of the main document.
+ */
+#toc.toc2 {
+  overflow-y: auto;
+}
+
+/* -- Dense engineering tables ------------------------------------------ */
+.tableblock th,
+.tableblock td {
+  font-size: 0.92em;
+}
+
+.tableblock {
+  display: block;
+  overflow-x: auto;
+}
+
+/* -- Code blocks -------------------------------------------------------- */
+.listingblock pre {
+  overflow-x: auto;
+  font-size: 0.88em;
+  line-height: 1.45;
+}
+
+/* -- Figures ------------------------------------------------------------ */
+.imageblock .title {
+  font-size: 0.9em;
+  color: #444;
+}
+
+/* -- Keyboard focus ------------------------------------------------------ */
+#toc a:focus-visible,
+#toc button:focus-visible {
+  outline: 2px solid #2156a5;
+  outline-offset: 1px;
+}
+
+/* -- Narrow screens: keep documentation readable ------------------------ */
+@media screen and (max-width: 768px) {
+  #toc .toc-disclosure {
+    min-width: 2em;
+    min-height: 2em;
+  }
+
+  #content pre {
+    overflow-x: auto;
+  }
+}
