@@ -14,14 +14,17 @@ module rv64xo3_ex (
     input rv64xo3_pkg::fwd_sel_e            fwd_b_sel_i,
     input logic                   [XLEN-1:0] fwd_ex_mem_data_i,
     input logic                   [XLEN-1:0] fwd_mem_wb_data_i,
+    // DIV accept pulse from top (single cycle per DIV; MUL needs none)
+    input logic                             div_start_i,
 
     // Outputs
     output logic [XLEN-1:0] alu_result_o,
     output logic            branch_taken_o,
     output logic [XLEN-1:0] branch_target_o,
-    output logic            muldiv_busy_o,
-    output logic [XLEN-1:0] muldiv_result_o,
-    output logic            muldiv_valid_o
+    output logic [XLEN-1:0] mul_result_o,
+    output logic [XLEN-1:0] div_result_o,
+    output logic            div_valid_o,
+    output logic            div_busy_o
 );
 
   //--------------------------------------------------------------------------
@@ -113,15 +116,16 @@ module rv64xo3_ex (
   // Multiply/Divide Unit
   //--------------------------------------------------------------------------
   rv64xo3_muldiv u_muldiv (
-      .clk_i   (clk_i),
-      .rst_ni  (rst_ni),
-      .start_i (id_ex_reg_i.valid && id_ex_reg_i.is_muldiv),
-      .op_i    (id_ex_reg_i.muldiv_op),
-      .a_i     (rs1_fwd),
-      .b_i     (rs2_fwd),
-      .result_o(muldiv_result_o),
-      .valid_o (muldiv_valid_o),
-      .busy_o  (muldiv_busy_o)
+      .clk_i       (clk_i),
+      .rst_ni      (rst_ni),
+      .start_i     (div_start_i),
+      .op_i        (id_ex_reg_i.muldiv_op),
+      .a_i         (rs1_fwd),
+      .b_i         (rs2_fwd),
+      .mul_result_o(mul_result_o),
+      .div_result_o(div_result_o),
+      .div_valid_o (div_valid_o),
+      .div_busy_o  (div_busy_o)
   );
 
 endmodule : rv64xo3_ex
