@@ -1,4 +1,6 @@
-= riscv64xO3: 64-bit Out-of-Order Superscalar RISC-V Core (RV64IMAC) — Technical Reference Manual
+= Atlas: 64-bit Out-of-Order Superscalar RISC-V Core (RV64IMAC) — Technical Reference Manual
+Tyrone Marhguy
+v0.1, 2026-10-01
 :toc: left
 :toclevels: 3
 :sectnums:
@@ -10,8 +12,6 @@
 :docinfodir: theme
 :imagesdir: images
 :stem: latexmath
-:revdate: 2026-10-01
-:revnumber: 0.1
 
 // Project identity lives here. The files under theme/ contain no
 // project names and are reused unchanged across repositories.

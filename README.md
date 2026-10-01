@@ -1,5 +1,5 @@
-<h1 align="center">riscv64xO3</h1>
-<p align="center"><strong>A 64-bit superscalar out-of-order RISC-V core, from RTL to silicon feasibility.</strong></p>
+<h1 align="center">Atlas</h1>
+<p align="center"><strong>A 64-bit out-of-order superscalar RISC-V core (RV64IMAC), from RTL to silicon feasibility.</strong></p>
 <p align="center">
   <a href="docs/index.adoc"><img alt="Status: active development" src="https://img.shields.io/badge/status-active%20development-2ea043"></a>
   <a href="docs/index.adoc"><img alt="Architecture: RV64IMAC OoO" src="https://img.shields.io/badge/architecture-RV64IMAC%20OoO-011F5B"></a>
@@ -14,7 +14,7 @@
 ## Architecture at a glance
 
 2-wide fetch/decode/issue/commit. Tomasulo reservation stations, 96-entry
-physical register file, 64-entry ROB, 16-entry LSQ, dual CDB, gshare+BTB+RAS.
+physical register file, 64-entry ROB, 16-entry LSQ, bimodal predictor.
 AXI4-Lite native. M-mode precise traps. See the
 [technical manual](docs/index.adoc).
 
