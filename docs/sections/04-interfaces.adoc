@@ -1,0 +1,44 @@
+[[ch-if]]
+== Interfaces
+
+The core is AXI4-Lite native on both instruction and data ports.
+There is no Wishbone in the core path; the legacy `wb_to_axi4lite`
+bridge is retained only under `rtl/axi/` for UART and debug bring-up.
+
+=== Bus architecture
+
+* Separate AXI4-Lite IMEM and DMEM masters from `rtl/rv64xo3_top.sv`.
+* Single clock domain with explicit reset strategy.
+* External memory interface only; no internal caches or TCM in this revision.
+
+.Core memory interfaces.
+[cols="1,1,2",options="header"]
+|===
+| Interface | Protocol | Notes
+| IMEM master | AXI4-Lite | Instruction fetch, `fetch_stall` on miss
+| DMEM master | AXI4-Lite | LSQ spill/fill, store drain at commit
+| UART bridge | AXI4-Lite via `wb_to_axi4lite` | Bring-up and `hello.c` demo only
+|===
+
+=== Clocks, reset, and memory map
+
+.Reset and address behavior.
+[cols="1,2",options="header"]
+|===
+| Item | Value
+| Clocking | Single clock domain
+| Reset | Synchronous; PC loads `RESET_PC = 0x8000_0000`
+| Privilege | M-mode only
+| Misaligned access | Precise trap, no hardware fixup
+|===
+
+TIP: Bare-metal programs link against `sw/link64.ld` with the reset
+vector at `0x8000_0000` and enter through `sw/crt0_64.S`.
+See <<ch-impl>> for the software flow.
+
+=== Debug and UART
+
+* `tb/tb_uart_axi.sv` and `rtl/uart_axi.sv` cover the UART path.
+* The `hello.c` end-to-end demo exercises UART output through the bridge.
+* Assertions for bus handshakes (for example `STB` implies `CYC`)
+  are documented in <<ch-verif>>.

@@ -1,0 +1,73 @@
+[[ch-design]]
+== Design
+
+This chapter describes the microarchitecture behind the pipeline in
+<<ch-arch>>. All module paths are relative to the repository root.
+
+=== Fetch (IF)
+
+Sources: `rtl/frontend/`, `rtl/rv64xo3_bp.sv`, `rtl/rv64xo3_if.sv`.
+
+* 2-wide fetch on a 4-byte-aligned PC, with an RVC expander (bring-up)
+  for 16-bit parcels.
+* gshare + BTB + RAS prediction as described in <<ch-arch>>.
+* Instruction memory reached through the AXI4-Lite master;
+  `fetch_stall` asserts on miss.
+
+=== Decode, rename, dispatch (ID)
+
+Sources: `rtl/rv64xo3_id.sv`, `rtl/issue/rv64xo3_rename.sv`, `rtl/rv64xo3_decoder.sv`.
+
+* 2-wide decode driven by `docs/isa/rv64xo3.csv`.
+  Illegal encodings poison the ROB entry and raise a precise trap.
+* Rename maps 32 architectural registers onto 96 physical registers
+  using a map table plus freelist, with a checkpoint per branch.
+* Dispatch targets ALU (x8), multiply (x4), and LSU (x4) reservation
+  stations and allocates ROB entries in order.
+  Dispatch stalls when RS, ROB, or LSQ is full.
+
+.Register and queue sizing.
+[cols="1,1,2",options="header"]
+|===
+| Structure | Entries | Function
+| ROB | 64 | In-order commit, precise traps
+| PRF | 96 x 64 bit | Renamed data storage
+| RS ALU / MUL / LSU | 8 / 4 / 4 | Tomasulo wakeup and select
+| LSQ | 16 | Forwarding, ordering, commit drain
+|===
+
+=== Issue and execute (IS)
+
+Sources: `rtl/issue/rv64xo3_rs.sv`, `rtl/execute/`, `rtl/rv64xo3_ex.sv`.
+
+* Tomasulo wakeup/select across two single-cycle ALUs, one 3-stage
+  pipelined multiplier, one shared iterative divider, and two CDBs.
+* Branch resolution in execute triggers flush and map-table restore.
+
+The ALU operation set (from `rtl/include/rv64xo3_pkg.sv`):
+
+[source,systemverilog]
+----
+typedef enum logic [4:0] {
+  ALU_ADD, ALU_SUB, ALU_SLL, ALU_SLT, ALU_SLTU,
+  ALU_XOR, ALU_SRL, ALU_SRA, ALU_OR, ALU_AND,
+  ALU_ADDW, ALU_SUBW, ALU_SLLW, ALU_SRLW, ALU_SRAW
+} alu_op_e;
+----
+
+=== Memory (MEM)
+
+Sources: `rtl/memory/rv64xo3_lsq.sv`, `rtl/rv64xo3_mem.sv`.
+
+* Store-to-load forwarding inside the LSQ; the store queue drains at commit.
+* Misaligned loads and stores raise traps instead of being fixed up.
+
+WARNING: There is no hardware misaligned-access fixup.
+Software or the trap handler must handle such cases.
+
+=== Commit (CM)
+
+Source: `rtl/commit/rv64xo3_rob.sv`.
+
+* In-order retirement of up to two instructions per cycle.
+* Precise traps flush younger entries and redirect fetch to `mtvec`.

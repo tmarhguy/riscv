@@ -1,0 +1,60 @@
+[[ch-verif]]
+== Verification
+
+Multi-layered strategy: block-level unit tests, cocotb integration,
+and `riscv-tests` compliance against the RTL model, all cycle-accurate
+under Verilator.
+
+=== Strategy
+
+.Verification layers and entry points.
+[cols="1,1,2",options="header"]
+|===
+| Layer | Tools | Scope
+| Unit (pytest) | `tb/unit/` | ALU, decoder, CSR, MulDiv, memory in isolation
+| Integration (cocotb) | `tb/cocotb/` | Pipeline interaction, hazards, bus models
+| Compliance | `tb/compliance/Makefile.rv64` | Official `riscv-tests` RV64 suites
+| Formal / SVA | `tb/formal/`, `rtl/rv64xo3_hazard_sva.sv` | 12 assertions: x0, PC/mutual-exclusion, handshake liveness
+|===
+
+Directed tests cover corner cases (divide-by-zero, mixed signs,
+misaligned traps, masked CSR writes); randomized tests cover arithmetic
+and constrained-random instruction streams. Bus-functional models drive
+the AXI4-Lite interfaces.
+
+=== Current results
+
+* Historical RV32UI/UM baseline: *100%* (37/37, 8/8) as a reference point.
+* Canonical target: RV64UI/UM/UC via `tb/compliance/Makefile.rv64`.
+* Line coverage ~61% and toggle coverage ~62% in the generated reports;
+  per-module highs include hazard, decoder, ALU, and CSR paths.
+  Coverage is in progress toward PRD targets (>=95% line, >=80% toggle).
+
+NOTE: Numbers here describe RTL simulation only.
+See <<ch-limit>> for what simulation evidence does and does not prove.
+
+=== Running the suites
+
+[source,bash]
+----
+make lint            # Verible + Verilator lint
+make unit            # pytest module tests
+make cocotb-smoke    # fast integration subset
+make cocotb          # full integration
+make compliance      # RV64 riscv-tests via Verilator sim
+make regress         # lint + unit + cocotb + compliance
+----
+
+Waveforms land in `waves/` as `.fst`; view them with:
+
+[source,bash]
+----
+make waves   # requires GTKWave on the host
+----
+
+=== Quality gates
+
+* Verible and Verilator lint clean: no inferred latches, no
+  combinational loops, all registers explicitly clocked.
+* Pre-commit hooks run the documentation guardrails
+  (`python3 tools/check_docs.py`) and YAML parsing.

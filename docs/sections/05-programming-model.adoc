@@ -1,0 +1,61 @@
+[[ch-prog]]
+== Programming Model
+
+=== ISA support
+
+Machine-readable contract: `docs/isa/rv64xo3.csv`
+(columns: `opcode,funct3,funct7/instr,name,class,description`).
+
+.ISA status. RV64IM is implemented; A/C are in bring-up.
+[cols="1,1,2",options="header"]
+|===
+| Extension | Status | Notes
+| RV64I (incl. W-suffixed word ops) | present | `ADDW/SUBW/SLLW/SRLW/SRAW`, `LD/SD`, `LWU`
+| M (incl. W ops) | present | `MUL[H[SU][U]]/DIV[U]/REM[U]`, `MULW/DIVW[D]/REMW[D]`
+| Zicsr / Zifencei | present | CSR access, fences
+| A | in progress | Bring-up; see <<ch-limit>>
+| C | in progress | 16-bit parcels via RVC expander (bring-up)
+|===
+
+The full opcode map covers integer computation (immediate and
+register-register), control transfer, loads/stores, `AUIPC`/`LUI`,
+system, and fence encodings. Illegal encodings trap precisely.
+
+=== Control and status registers
+
+.Minimum CSR set (`rtl/include/rv64xo3_pkg.sv`).
+[cols="1,1,2",options="header"]
+|===
+| CSR | Address | Purpose
+| `mstatus` | `0x300` | Machine status
+| `misa` | `0x301` | ISA identity
+| `mie` / `mip` | `0x304` / `0x344` | Interrupt enable / pending
+| `mtvec` | `0x305` | Trap vector
+| `mscratch` | `0x340` | Machine scratch
+| `mepc` / `mcause` / `mtval` | `0x341` / `0x342` / `0x343` | Trap state
+| `cycle` / `instret` | `0xC00` / `0xC02` | Counters
+| `mvendorid` / `marchid` / `mimpid` / `mhartid` | `0xF11`-`0xF14` | Identity
+|===
+
+CSR instructions `CSRRW/CSRRS/CSRRC` and immediates are supported,
+including masked writes. `mret` restores the pre-trap PC.
+
+=== Traps and exceptions
+
+.Precise M-mode trap causes (`mcause` values).
+[cols="1,2",options="header"]
+|===
+| Cause | Meaning
+| 0 | Instruction address misaligned
+| 1 | Instruction access fault
+| 2 | Illegal instruction
+| 3 | Breakpoint
+| 4 | Load address misaligned
+| 5 | Load access fault
+| 6 | Store address misaligned
+| 7 | Store access fault
+| 11 | Environment call from M-mode
+|===
+
+`ecall`, `ebreak`, CSR operations, and `mret` retire at the ROB head,
+so trap entry updates the PC and `mret` restores it atomically.

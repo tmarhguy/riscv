@@ -1,0 +1,46 @@
+= riscv64xO3 Technical Reference Manual
+:toc: left
+:toclevels: 3
+:sectnums:
+:sectnumlevels: 3
+:icons: font
+:sectanchors:
+:toc-title: Contents
+:docinfo: shared
+:docinfodir: theme
+:imagesdir: images
+:stem: latexmath
+:revdate: 2026-10-01
+:revnumber: 0.1
+
+// Project identity lives here. The files under theme/ contain no
+// project names and are reused unchanged across repositories.
+//
+// To add, remove, or reorder chapters, edit the include list below.
+// Each chapter is one file under sections/ starting with '== Title'.
+
+[.lead]
+A 64-bit superscalar out-of-order RISC-V core, from RTL to silicon feasibility.
+
+Authority: `rtl/` SystemVerilog wins over this prose.
+Current facts: <<ch-intro>> and <<ch-limit>>.
+Machine-readable ISA contract: `docs/isa/rv64xo3.csv`.
+History in `docs/log/` is never authoritative for current status.
+
+include::sections/01-introduction.adoc[]
+
+include::sections/02-architecture.adoc[]
+
+include::sections/03-design.adoc[]
+
+include::sections/04-interfaces.adoc[]
+
+include::sections/05-programming-model.adoc[]
+
+include::sections/06-verification.adoc[]
+
+include::sections/07-implementation.adoc[]
+
+include::sections/08-performance.adoc[]
+
+include::sections/09-limitations.adoc[]

@@ -1,0 +1,51 @@
+[[ch-arch]]
+== Architecture
+
+Target: *RV64IMAC + Zicsr/Zifencei*, 2-wide superscalar out-of-order,
+Tomasulo with in-order commit. AXI4-Lite native. M-mode precise traps.
+
+=== Pipeline overview
+
+Five programmer-visible stages: fetch, decode/rename/dispatch,
+issue/execute, memory, commit. Mispredicts and traps roll back to the
+ROB head and redirect fetch.
+
+[[fig-pipeline]]
+.Pipeline stages and rollback path.
+image::pipeline.svg[Pipeline stages,align=center]
+
+The commit stage retires up to two instructions per cycle and is the
+only point where architectural state becomes visible.
+See <<ch-design>> for stage internals and <<ch-if>> for bus behavior.
+
+=== Top-level parameters
+
+.Parameters from `rtl/include/rv64xo3_pkg.sv`.
+[cols="1,1,2",options="header"]
+|===
+| Parameter | Value | Notes
+| `XLEN` | 64 | RV64 datapath
+| `FETCH_WIDTH` / `COMMIT_WIDTH` | 2 | Superscalar width
+| `ROB_SZ` | 64 | In-order retire buffer
+| `PRF_SZ` | 96 | Physical registers (32 arch {rightarrow} 96 phys)
+| `RS_ALU_SZ` / `RS_MUL_SZ` / `RS_LSU_SZ` | 8 / 4 / 4 | Reservation stations
+| `LSQ_SZ` | 16 | Load-store queue
+| `RESET_PC` | `0x8000_0000` | Reset vector
+|===
+
+=== Branch prediction
+
+* gshare predictor with 8K-entry pattern history table.
+* 1K-entry branch target buffer plus 16-entry return-address stack.
+* BTB miss predicts not-taken; resolution happens in execute.
+* Mispredict flushes instructions younger than the ROB branch entry and
+  restores the rename checkpoint. Sources: `rtl/rv64xo3_bp.sv`, `rtl/frontend/`.
+
+=== Memory and commit model
+
+* 16-entry LSQ with store-to-load forwarding; stores drain at commit.
+* Speculative loads guarded by a conservative store-set conflict predictor.
+* AXI4-Lite instruction and data masters; misaligned accesses trap,
+  there is no hardware fixup. See <<ch-if>>.
+* CSR, `mret`, `ecall`, and `ebreak` retire at the ROB head only,
+  giving precise M-mode traps (`mepc`/`mcause`/`mtval` set, redirect to `mtvec`).

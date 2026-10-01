@@ -1,0 +1,65 @@
+[[ch-intro]]
+== Introduction
+
+riscv64xO3 is a 64-bit superscalar out-of-order RISC-V project and core.
+Target ISA: *RV64IMAC + Zicsr/Zifencei*.
+The core fetches, decodes, issues, and commits two instructions per cycle,
+using Tomasulo reservation stations with in-order ROB commit.
+Native bus: AXI4-Lite. Privilege: M-mode with precise traps.
+
+=== What this manual is
+
+This manual is the detailed technical reference.
+The root `README.md` remains the concise GitHub-facing project overview;
+it does not duplicate this content.
+
+=== Repository map
+
+.Repository layout. Use it to locate evidence for every claim.
+[cols="1,3",options="header"]
+|===
+| Path | Purpose
+| `rtl/` | SystemVerilog source (synthesizable). Executable authority.
+| `tb/` | Unit, cocotb, compliance, and formal testbenches
+| `docs/` | This manual (source) plus ISA contract and history
+| `sw/` | CRT, linker scripts, bare-metal examples
+| `asic/` | Yosys synthesis and OpenLane feasibility flow
+| `tools/` | Documentation guardrails, ISA generators
+| `scripts/` | Build and reporting scripts, including `build-docs.sh`
+| `docker/` | Development and CI container definitions
+|===
+
+=== Canonical vocabulary
+
+* *riscv64xO3* is the 64-bit superscalar out-of-order RISC-V project and core.
+* *RTL simulation* means Verilator-driven simulation of `rtl/`.
+  Label its results as simulation, never silicon or board execution.
+* *Compliance* means the `riscv-tests` ISA suites run against the RTL model.
+* *FPGA prototype* means a future `hw/fpga` mapping; it does not exist yet.
+* *ASIC feasibility* means Yosys/OpenLane smoke reports in `asic/`;
+  it is not a tapeout.
+
+=== Documentation authority
+
+When sources disagree, this order wins:
+
+1. `rtl/` SystemVerilog (the executable authority).
+2. <<ch-limit,Known Limitations>> and the facts stated in this introduction.
+3. Machine-readable contracts (`docs/isa/rv64xo3.csv`, `tools/` generators).
+4. Other prose in this manual.
+5. `docs/log/` history (never authoritative for current status).
+
+Status words are used exactly: *present* / *in progress* / *planned* / *verified*.
+Simulation, FPGA, and silicon claims are kept distinct.
+
+NOTE: Dated engineering history lives in `docs/log/`.
+Do not cite a log entry for present status unless a current chapter confirms it.
+
+=== Conventions used in this manual
+
+`mono` marks file paths, signal names, and commands.
+Cross references look like <<ch-arch>> and resolve in both the
+source view and the built site.
+Admonitions mark non-obvious obligations:
+
+TIP: Start with this chapter and <<ch-limit>> before trusting any number elsewhere.

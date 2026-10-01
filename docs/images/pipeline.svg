@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="120" viewBox="0 0 640 120" font-family="Helvetica, Arial, sans-serif">
+  <title>Pipeline overview</title>
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8" fill="none" stroke="#333" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <g font-size="12" text-anchor="middle">
+    <rect x="8" y="30" width="100" height="56" fill="#fff" stroke="#333" stroke-width="1.5"/>
+    <text x="58" y="54" font-weight="bold">Fetch</text>
+    <text x="58" y="70">2-wide</text>
+    <rect x="140" y="30" width="100" height="56" fill="#fff" stroke="#333" stroke-width="1.5"/>
+    <text x="190" y="54" font-weight="bold">Decode</text>
+    <text x="190" y="70">rename</text>
+    <rect x="272" y="30" width="100" height="56" fill="#fff" stroke="#333" stroke-width="1.5"/>
+    <text x="322" y="54" font-weight="bold">Issue/EX</text>
+    <text x="322" y="70">RS + CDB</text>
+    <rect x="404" y="30" width="100" height="56" fill="#fff" stroke="#333" stroke-width="1.5"/>
+    <text x="454" y="54" font-weight="bold">Memory</text>
+    <text x="454" y="70">LSQ + AXI</text>
+    <rect x="532" y="30" width="100" height="56" fill="#fff" stroke="#333" stroke-width="1.5"/>
+    <text x="582" y="54" font-weight="bold">Commit</text>
+    <text x="582" y="70">in-order</text>
+  </g>
+  <g stroke="#333" stroke-width="1.5">
+    <line x1="108" y1="58" x2="136" y2="58" marker-end="url(#arr)"/>
+    <line x1="240" y1="58" x2="268" y2="58" marker-end="url(#arr)"/>
+    <line x1="372" y1="58" x2="400" y2="58" marker-end="url(#arr)"/>
+    <line x1="504" y1="58" x2="528" y2="58" marker-end="url(#arr)"/>
+  </g>
+</svg>

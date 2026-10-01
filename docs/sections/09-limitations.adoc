@@ -1,0 +1,33 @@
+[[ch-limit]]
+== Known Limitations
+
+This chapter bounds what the repository proves. It outranks any
+optimistic reading of earlier chapters.
+
+=== Status boundaries
+
+* *Source-present:* in-order 5-stage pipeline renamed to `rv64xo3_*`;
+  out-of-order issue/commit scaffolding present; full Tomasulo in progress.
+* *Testable without hardware:* `make lint unit cocotb-smoke compliance`.
+* *Hardware-dependent:* FPGA mapping, board boot, and silicon require live
+  evidence. Do not infer them from source or simulation.
+
+=== Open items
+
+* A and C extensions are in bring-up, not verified.
+* No instruction/data caches; AXI4-Lite latency bounds IPC.
+* No hardware misaligned-access fixup; traps only.
+* FPGA prototype mapping does not exist yet.
+* ASIC work is feasibility smoke (Yosys + OpenLane2), not a tapeout.
+* CoreMark and FPGA synthesis numbers are pending.
+
+WARNING: Never relabel simulation, feasibility, or estimates as
+silicon, board, or tapeout results.
+
+=== History and policy
+
+Dated decisions live in `docs/log/` (`YYYY-MM-DD-topic.md` with what was
+run and observed). Log entries are historical and never override this
+chapter. The standing authority order is `rtl/`, then this manual's
+current facts, then machine-readable contracts, then other prose, then
+history.

@@ -1,0 +1,48 @@
+[[ch-perf]]
+== Performance
+
+All figures below are measured on Verilator RTL simulation unless noted.
+They describe the model, not silicon or a board.
+
+=== Dhrystone 2.1
+
+*Config:* 100 runs, GCC 15.1.0 `-O2`, `RV64IM_Zicsr`.
+
+.Measured results.
+[cols="1,1",options="header"]
+|===
+| Metric | Value
+| Cycles per run | 1174
+| DMIPS/MHz | 0.49
+| IPC | TBD (counter issue in the measured run)
+|===
+
+The score follows the standard definition:
+
+[stem]
+++++
+\mathrm{DMIPS/MHz} = \frac{10^6 / \mathrm{cycles\_per\_run}}{1757}
+++++
+
+Current performance is bounded by the absence of caches: instruction
+fetch and data access over AXI4-Lite cost multiple cycles per access.
+A dedicated instruction cache or tightly coupled memory would move IPC
+toward the theoretical 2-wide ceiling.
+
+=== Other benchmarks
+
+* CoreMark: pending porting.
+* FPGA synthesis on Artix-7: pending vendor run.
+* Post-layout frequency and power: TBD after a full OpenLane run.
+
+=== Resource and timing estimates
+
+.Pending measurement; do not quote as results.
+[cols="1,2",options="header"]
+|===
+| Item | Estimate basis
+| LUTs / FFs | ~5-8k / ~2-3k from RTL complexity (5-stage + OoO scaffolding)
+| Block RAM / DSP | Minimal / 0-2 depending on multiplier mapping
+| Target clock | 50-100 MHz conservative (Artix-7); 50-150 MHz post-layout (Sky130)
+| Critical path | Likely ALU or hazard detection
+|===

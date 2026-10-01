@@ -1,0 +1,86 @@
+[[ch-impl]]
+== Implementation
+
+=== Getting started
+
+Two flows are supported. Docker is recommended for exact tool versions.
+
+*Option A -- Docker (recommended):*
+
+[source,bash]
+----
+make docker-build
+make docker-shell
+# inside the container:
+make regress
+----
+
+*Option B -- local install (Linux/macOS):*
+
+[source,bash]
+----
+brew install verilator            # macOS
+# or: sudo apt install verilator  # Ubuntu
+pip install -r requirements.txt
+# riscv64-unknown-elf-gcc must be on PATH
+----
+
+Focused checks after setup:
+
+[source,bash]
+----
+python3 tools/check_docs.py
+make lint
+make unit cocotb-smoke
+----
+
+=== Build and test commands
+
+.Canonical make targets.
+[cols="1,2",options="header"]
+|===
+| Command | Effect
+| `make lint` | Verible + Verilator lint
+| `make sim` | Build the Verilator simulator binary
+| `make unit` / `make cocotb[-smoke]` | Unit / integration tests
+| `make compliance` | RV64 compliance (RV32 kept as `compliance-rv32` baseline)
+| `make regress` | Full regression: lint + all test layers
+| `make synth` | Yosys synthesis smoke
+| `make asic-feas` | OpenLane feasibility (needs PDK image)
+| `make docs` | Build this manual into `build/docs/`
+|===
+
+Generated artifacts go to `build/` (simulation, logs) and `waves/`
+(waveforms). Both are gitignored and never committed.
+
+=== Synthesis and ASIC feasibility
+
+*Synthesis status (Yosys, `rv64xo3_top`).*
+
+[cols="1,1,2",options="header"]
+|===
+| Aspect | Status | Notes
+| RTL synthesizability | verified | Yosys completes; no latches or combinational loops
+| FPGA target | Artix-7 family | Vendor run pending; LUT/FF counts estimated only
+| ASIC feasibility | Sky130 / OpenLane2 | Flow configured (`asic/`); not a tapeout
+| Clocking | single domain | Explicit synchronous reset
+|===
+
+[source,bash]
+----
+make synth        # Yosys smoke (see scripts/synth/)
+make asic-feas    # OpenLane feasibility (see asic/)
+----
+
+Estimates only, pending real runs: core area on the order of
+0.1-0.3 mm^2 in Sky130, 50-150 MHz post-layout, 5-8k LUTs on Artix-7.
+Do not quote these as measured results.
+
+=== Software flow
+
+* `sw/crt0_64.S` startup, `sw/link64.ld` link script, `sw/uart.h` driver.
+* Examples: `sw/hello.c` (UART end-to-end), `sw/test_misalign.c`.
+* 32-bit `crt0.S`/`link.ld` retained for the legacy RV32 baseline.
+
+TIP: Rebuild software images with `make -C sw`; never commit
+generated `.elf`/`.hex`/`.mem` files.
