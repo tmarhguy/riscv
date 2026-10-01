@@ -1,29 +1,63 @@
 // riscv64xO3 MulDiv Unit - Multiply and Divide
-// Iterative implementation for RV64IM extension
-// MUL operations: 2 cycles
-// DIV operations: 65 cycles (one bit per cycle + result) for RV64
+// MUL operations: single-cycle combinational (1/cycle throughput), like ALU.
+// DIV operations: iterative (65 cycles for RV64), non-blocking — the core
+// holds at most one outstanding DIV in a scoreboard slot (see rv64xo3_top)
+// while independent instructions keep flowing.
 
 import rv64xo3_pkg::*;
 module rv64xo3_muldiv (
     input logic clk_i,
     input logic rst_ni,
 
+    // DIV accept pulse from top (single cycle per DIV; MUL needs no start).
     input logic                                start_i,
     input rv64xo3_pkg::muldiv_op_e            op_i,
     input logic                     [XLEN-1:0] a_i,
     input logic                     [XLEN-1:0] b_i,
 
-    output logic [XLEN-1:0] result_o,
-    output logic            valid_o,
-    output logic            busy_o
+    // MUL: combinational result for the live inputs (same contract as ALU).
+    output logic [XLEN-1:0] mul_result_o,
+    // DIV: engine result + single-cycle completion pulse + busy.
+    output logic [XLEN-1:0] div_result_o,
+    output logic            div_valid_o,
+    output logic            div_busy_o
 );
 
+  // Operation classes
+  logic is_mul_op;
+  assign is_mul_op = (op_i == MD_MUL) || (op_i == MD_MULH) || (op_i == MD_MULHSU) ||
+                     (op_i == MD_MULHU) || (op_i == MD_MULW);
+
   //--------------------------------------------------------------------------
-  // State Machine
+  // Combinational multiply (single-cycle, same contract as the ALU)
+  //--------------------------------------------------------------------------
+  logic [127:0] mul_product;
+  always_comb begin
+    case (op_i)
+      MD_MUL, MD_MULH:  mul_product = $signed(a_i) * $signed(b_i);
+      MD_MULHSU:        mul_product = $signed(a_i) * $signed({1'b0, b_i});
+      MD_MULHU:         mul_product = a_i * b_i;
+      MD_MULW:          mul_product = 128'($signed(a_i[31:0]) * $signed(b_i[31:0]));
+      default:          mul_product = '0;
+    endcase
+  end
+
+  always_comb begin
+    case (op_i)
+      MD_MUL:    mul_result_o = mul_product[XLEN-1:0];
+      MD_MULH:   mul_result_o = mul_product[2*XLEN-1:XLEN];
+      MD_MULHSU: mul_result_o = mul_product[2*XLEN-1:XLEN];
+      MD_MULHU:  mul_result_o = mul_product[2*XLEN-1:XLEN];
+      MD_MULW:   mul_result_o = {{32{mul_product[31]}}, mul_product[31:0]};
+      default:   mul_result_o = '0;
+    endcase
+  end
+
+  //--------------------------------------------------------------------------
+  // Iterative divider (non-blocking; one outstanding operation)
   //--------------------------------------------------------------------------
   typedef enum logic [1:0] {
     IDLE,
-    MUL_COMPUTE,
     DIV_COMPUTE,
     DONE
   } state_e;
@@ -31,9 +65,8 @@ module rv64xo3_muldiv (
   state_e state, state_next;
 
   //--------------------------------------------------------------------------
-  // Internal Registers
+  // Internal Registers (divider only)
   //--------------------------------------------------------------------------
-  logic [127:0] product;  // For 64x64 multiplication result (RV64)
   logic [XLEN-1:0] dividend;  // Working dividend for division
   logic [XLEN-1:0] divisor;  // Divisor
   logic [XLEN-1:0] quotient;  // Quotient accumulator
@@ -90,18 +123,15 @@ module rv64xo3_muldiv (
     state_next = state;
     case (state)
       IDLE: begin
-        if (start_i) begin
+        // Only DIV operations occupy the engine; MUL is combinational.
+        // DONE always returns to IDLE (even with start held) so a waiting
+        // DIV issues cleanly from IDLE with a fresh operand latch.
+        if (start_i && !is_mul_op) begin
           case (op_i)
-            MD_MUL, MD_MULH, MD_MULHSU, MD_MULHU, MD_MULW: state_next = MUL_COMPUTE;
             MD_DIV, MD_DIVU, MD_REM, MD_REMU,
             MD_DIVW, MD_DIVUW, MD_REMW, MD_REMUW: state_next = DIV_COMPUTE;
             default:                              state_next = IDLE;
           endcase
-        end
-      end
-      MUL_COMPUTE: begin
-        if (cycle_cnt == 7'd1) begin
-          state_next = DONE;
         end
       end
       DIV_COMPUTE: begin
@@ -117,11 +147,10 @@ module rv64xo3_muldiv (
   end
 
   //--------------------------------------------------------------------------
-  // Computation Logic
+  // Computation Logic (divider only)
   //--------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      product   <= '0;
       dividend  <= '0;
       divisor   <= '0;
       quotient  <= '0;
@@ -134,30 +163,13 @@ module rv64xo3_muldiv (
     end else begin
       case (state)
         IDLE: begin
-          if (start_i) begin
+          if (start_i && !is_mul_op) begin
             op_reg    <= op_i;
             a_reg     <= a_i;
             b_reg     <= b_i;
             cycle_cnt <= '0;
 
             case (op_i)
-              // Signed x Signed multiplication (64x64 → 128-bit)
-              MD_MUL, MD_MULH: begin
-                product <= $signed(a_i) * $signed(b_i);
-              end
-              // Signed x Unsigned multiplication
-              MD_MULHSU: begin
-                product <= $signed(a_i) * $signed({1'b0, b_i});
-              end
-              // Unsigned x Unsigned multiplication
-              MD_MULHU: begin
-                product <= a_i * b_i;
-              end
-              // RV64M: 32-bit Multiply (MULW)
-              MD_MULW: begin
-                  // Multiply lower 32 bits, result is sign-extended 32-bit product
-                  product <= $signed(a_i[31:0]) * $signed(b_i[31:0]);
-              end
               // Division setup
               MD_DIV, MD_REM: begin
                 dividend  <= a_abs;
@@ -192,12 +204,6 @@ module rv64xo3_muldiv (
             endcase
           end
         end
-        // ... (MUL_COMPUTE and DIV_COMPUTE logic unchanged)
-        MUL_COMPUTE: begin
-          cycle_cnt <= cycle_cnt + 1'b1;
-          // Multiplication completes in pipeline (combinational result ready)
-        end
-
         DIV_COMPUTE: begin
           cycle_cnt <= cycle_cnt + 1'b1;
 
@@ -337,30 +343,29 @@ module rv64xo3_muldiv (
     end
   end
 
+  // DIV result mux over the latched engine state. MUL never reads this
+  // path (it uses mul_result_o); the two completions are independent.
   always_comb begin
     case (op_reg)
-      MD_MUL:    result_o = product[XLEN-1:0];
-      MD_MULH:   result_o = product[2*XLEN-1:XLEN];
-      MD_MULHSU: result_o = product[2*XLEN-1:XLEN];
-      MD_MULHU:  result_o = product[2*XLEN-1:XLEN];
-      // RV64M
-      MD_MULW:   result_o = {{32{product[31]}}, product[31:0]}; // Sign-extend lower 32 bits
-      MD_DIV:    result_o = div_result;
-      MD_DIVU:   result_o = div_result;
-      MD_REM:    result_o = rem_result;
-      MD_REMU:   result_o = rem_result;
-      MD_DIVW:   result_o = div_result;
-      MD_DIVUW:  result_o = div_result;
-      MD_REMW:   result_o = rem_result;
-      MD_REMUW:  result_o = rem_result;
-      default:   result_o = '0;
+      MD_DIV:    div_result_o = div_result;
+      MD_DIVU:   div_result_o = div_result;
+      MD_REM:    div_result_o = rem_result;
+      MD_REMU:   div_result_o = rem_result;
+      MD_DIVW:   div_result_o = div_result;
+      MD_DIVUW:  div_result_o = div_result;
+      MD_REMW:   div_result_o = rem_result;
+      MD_REMUW:  div_result_o = rem_result;
+      default:   div_result_o = '0;
     endcase
   end
 
   //--------------------------------------------------------------------------
   // Status Outputs
   //--------------------------------------------------------------------------
-  assign valid_o = (state == DONE);
-  assign busy_o  = (state != IDLE) && (state != DONE);
+  // DONE pulses for exactly one cycle; top injects the writeback on it.
+  // DONE always returns to IDLE (even with start held) so back-to-back DIVs
+  // issue cleanly from IDLE with a fresh latch each time.
+  assign div_valid_o = (state == DONE);
+  assign div_busy_o  = (state != IDLE);
 
 endmodule : rv64xo3_muldiv
