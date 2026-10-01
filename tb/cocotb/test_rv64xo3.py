@@ -9,6 +9,37 @@ from cocotb.triggers import RisingEdge, ClockCycles, Timer
 import pytest
 
 
+# --- Tiny RV64 encoders (avoid hand-encoded hex for programmed tests) ---
+def enc_i(imm, rs1, f3, rd, op=0x13):
+    return (((imm & 0xFFF) << 20) | ((rs1 & 0x1F) << 15) |
+            ((f3 & 0x7) << 12) | ((rd & 0x1F) << 7) | op)
+
+
+def enc_r(f7, rs2, rs1, f3, rd, op=0x33):
+    return (((f7 & 0x7F) << 25) | ((rs2 & 0x1F) << 20) |
+            ((rs1 & 0x1F) << 15) | ((f3 & 0x7) << 12) |
+            ((rd & 0x1F) << 7) | op)
+
+
+def enc_s(imm, rs2, rs1, f3, op=0x23):
+    imm &= 0xFFF
+    return ((((imm >> 5) & 0x7F) << 25) | ((rs2 & 0x1F) << 20) |
+            ((rs1 & 0x1F) << 15) | ((f3 & 0x7) << 12) |
+            ((imm & 0x1F) << 7) | op)
+
+
+TOHOST_OFF = 0x100  # dmem offset watched for completion
+
+
+async def run_until_store(dut, dmem, expect, limit=400):
+    """Run until dmem[TOHOST_OFF] == expect; return cycle count."""
+    for i in range(limit):
+        await RisingEdge(dut.clk_i)
+        if dmem._read_word(TOHOST_OFF) == expect:
+            return i
+    return None
+
+
 class WishboneMemory:
     """Simple Wishbone memory model for testing"""
 
@@ -272,3 +303,91 @@ async def test_jal(dut):
     await ClockCycles(dut.clk_i, 30)
 
     dut._log.info("JAL test completed")
+
+
+N_OVERLAP_OPS = 40
+
+
+@cocotb.test()
+async def test_div_overlap(dut):
+    """Phase 1: independent ALU ops retire while DIV iterates.
+
+    div x5 (65-cycle iterative divide) runs while 40 independent addi
+    flow through the pipe; a final add consumes the DIV result (which must
+    stall correctly, then read the right value). Proves no whole-pipeline
+    stall: a fully-stalling design needs ~65 + 40 + fill cycles here.
+    """
+    clock = Clock(dut.clk_i, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+
+    prog = {
+        0x00: enc_i(100, 0, 0, 1),          # addi x1, x0, 100
+        0x04: enc_i(7, 0, 0, 2),            # addi x2, x0, 7
+        0x08: enc_r(0x01, 2, 1, 0x4, 5),    # div x5, x1, x2 (= 14)
+    }
+    addr = 0x0C
+    for _ in range(N_OVERLAP_OPS):
+        prog[addr] = enc_i(1, 6, 0, 6)      # addi x6, x6, 1 (x6 = 40)
+        addr += 4
+    prog[addr] = enc_r(0x00, 6, 5, 0x0, 7)  # add x7, x5, x6 (= 54)
+    addr += 4
+    prog[addr] = enc_i(0x100, 0, 0, 8)      # addi x8, x0, 0x100
+    addr += 4
+    prog[addr] = enc_s(0, 7, 8, 0x2)        # sw x7, 0(x8) -> TOHOST
+    addr += 4
+    prog[addr] = 0x0000006F                 # jal x0, 0 (halt)
+    expect = 14 + N_OVERLAP_OPS
+
+    imem = WishboneMemory(dut, "iwb", init_data=prog)
+    dmem = WishboneMemory(dut, "dwb")
+
+    cocotb.start_soon(imem.run())
+    cocotb.start_soon(dmem.run())
+
+    await reset_dut(dut)
+
+    done_at = await run_until_store(dut, dmem, expect)
+    assert done_at is not None, "DIV overlap test did not complete"
+    dut._log.info(f"DIV overlap completed in {done_at} cycles "
+                  f"({N_OVERLAP_OPS} independent ops overlapped)")
+    # A fully-stalling DIV needs ~65 + 40 + fill here; overlap must beat it.
+    assert done_at < 130, f"no overlap? took {done_at} cycles"
+
+
+@cocotb.test()
+async def test_mul_throughput(dut):
+    """Phase 1: back-to-back independent MULs retire at ~1/cycle.
+
+    8 independent MULs (single-cycle now) plus stores. A 4-cycle MUL
+    design would need 8*4 + fill cycles here.
+    """
+    clock = Clock(dut.clk_i, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+
+    prog = {
+        0x00: enc_i(3, 0, 0, 1),            # addi x1, x0, 3
+        0x04: enc_i(5, 0, 0, 2),            # addi x2, x0, 5
+    }
+    addr = 0x08
+    for rd in range(3, 11):
+        prog[addr] = enc_r(0x01, 2, 1, 0x0, rd)  # mul xN, x1, x2 (= 15)
+        addr += 4
+    prog[addr] = enc_i(0x100, 0, 0, 20)      # addi x20, x0, 0x100
+    addr += 4
+    prog[addr] = enc_s(0, 10, 20, 0x2)       # sw x10, 0(x20) -> TOHOST (= 15)
+    addr += 4
+    prog[addr] = 0x0000006F                  # jal x0, 0 (halt)
+
+    imem = WishboneMemory(dut, "iwb", init_data=prog)
+    dmem = WishboneMemory(dut, "dwb")
+
+    cocotb.start_soon(imem.run())
+    cocotb.start_soon(dmem.run())
+
+    await reset_dut(dut)
+
+    done_at = await run_until_store(dut, dmem, 15)
+    assert done_at is not None, "MUL throughput test did not complete"
+    dut._log.info(f"8xMUL throughput completed in {done_at} cycles")
+    # 4-cycle MULs would need 8*4 + fill here; single-cycle must beat it.
+    assert done_at < 40, f"no 1/cycle throughput? took {done_at} cycles"

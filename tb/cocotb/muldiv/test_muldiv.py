@@ -39,15 +39,20 @@ async def drive_muldiv(dut, op, a, b):
     await RisingEdge(dut.clk_i)
     dut.start_i.value = 0
 
-    # Wait for valid_o
+    if op in (MD_MUL, MD_MULH, MD_MULHSU, MD_MULHU, MD_MULW):
+        # MUL is combinational: result ready once inputs settle.
+        await Timer(1, unit='ns')
+        return dut.mul_result_o.value
+
+    # DIV: wait for the completion pulse, then read the engine result.
     timeout = 100
-    while dut.valid_o.value == 0:
+    while dut.div_valid_o.value == 0:
         await RisingEdge(dut.clk_i)
         timeout -= 1
         if timeout == 0:
-            assert False, ("Timeout waiting for muldiv valid_o")
+            assert False, ("Timeout waiting for muldiv div_valid_o")
 
-    return dut.result_o.value
+    return dut.div_result_o.value
 
 def to_signed64(val):
     val = int(val)
