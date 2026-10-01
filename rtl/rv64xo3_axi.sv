@@ -1,4 +1,4 @@
-module ironcore_axi #(
+module rv64xo3_axi #(
     parameter logic [31:0] RESET_PC = 32'h0000_0000
 ) (
     input  logic        clk_i,
@@ -63,8 +63,8 @@ module ironcore_axi #(
     logic [31:0] dwb_dat_i;
     logic        dwb_ack;
 
-    // Instantiate IronCore Top (Wishbone)
-    ironcore_top #(
+    // Instantiate riscv64xO3 Top (Wishbone)
+    rv64xo3_top #(
         .RESET_PC(RESET_PC)
     ) u_core (
         .clk_i    (clk_i),
@@ -90,7 +90,7 @@ module ironcore_axi #(
 
     // Instruction Bus Bridge
     // Note: Instructions are read-only, so we tie off write inputs/outputs effectively?
-    // Actually, the bridge handles it. IronCore never asserts iwb_we, so it will be a READ.
+    // Actually, the bridge handles it. riscv64xO3 never asserts iwb_we, so it will be a READ.
     wb_to_axi4lite #(
         .DATA_WIDTH(32),
         .ADDR_WIDTH(32)

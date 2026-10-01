@@ -1,8 +1,8 @@
-// IronCore Branch Predictor - Bimodal (2-bit saturating counters)
+// riscv64xO3 Branch Predictor - Bimodal (2-bit saturating counters)
 // Indexed by PC bits, predicts branch direction
 
-import ironcore_pkg::*;
-module ironcore_bp #(
+import rv64xo3_pkg::*;
+module rv64xo3_bp #(
     parameter int BHT_SIZE   = 256,  // Branch History Table entries
     parameter int BHT_ADDR_W = 8     // log2(BHT_SIZE)
 ) (
@@ -51,14 +51,14 @@ module ironcore_bp #(
   //--------------------------------------------------------------------------
   // Target Calculation
   //--------------------------------------------------------------------------
-  // B-type immediate extraction
+  // B-type immediate: 13-bit signed offset, sign-extended to 64
   logic [XLEN-1:0] imm_b;
-  assign imm_b = {{19{instr_i[31]}}, instr_i[31], instr_i[7], instr_i[30:25], instr_i[11:8], 1'b0};
+  assign imm_b = {{51{instr_i[31]}}, instr_i[31], instr_i[7], instr_i[30:25], instr_i[11:8], 1'b0};
 
-  // J-type immediate extraction
+  // J-type immediate: 21-bit signed offset, sign-extended to 64
   logic [XLEN-1:0] imm_j;
   assign imm_j = {
-    {11{instr_i[31]}}, instr_i[31], instr_i[19:12], instr_i[20], instr_i[30:21], 1'b0
+    {43{instr_i[31]}}, instr_i[31], instr_i[19:12], instr_i[20], instr_i[30:21], 1'b0
   };
 
   //--------------------------------------------------------------------------
@@ -70,7 +70,7 @@ module ironcore_bp #(
   always_comb begin
     // Default: no prediction
     pred_taken_o  = 1'b0;
-    pred_target_o = pc_i + 32'd4;
+    pred_target_o = pc_i + 64'd4;
 
     if (instr_valid_i) begin
       if (is_jal) begin
@@ -80,7 +80,7 @@ module ironcore_bp #(
       end else if (is_branch) begin
         // Use 2-bit counter prediction (bit[1] = taken)
         pred_taken_o  = counter_val[1];
-        pred_target_o = pred_taken_o ? (pc_i + imm_b) : (pc_i + 32'd4);
+        pred_target_o = pred_taken_o ? (pc_i + imm_b) : (pc_i + 64'd4);
       end
     end
   end
@@ -110,4 +110,4 @@ module ironcore_bp #(
     end
   end
 
-endmodule : ironcore_bp
+endmodule : rv64xo3_bp

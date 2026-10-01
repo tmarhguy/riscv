@@ -1,9 +1,9 @@
-// IronCore ALU - Arithmetic Logic Unit
+// riscv64xO3 ALU - Arithmetic Logic Unit
 // Implements all RV64IM ALU operations
 
-import ironcore_pkg::*;
-module ironcore_alu (
-    input  ironcore_pkg::alu_op_e            op_i,
+import rv64xo3_pkg::*;
+module rv64xo3_alu (
+    input  rv64xo3_pkg::alu_op_e            op_i,
     input  logic                  [XLEN-1:0] a_i,
     input  logic                  [XLEN-1:0] b_i,
     output logic                  [XLEN-1:0] result_o
@@ -14,11 +14,11 @@ module ironcore_alu (
   assign shamt = b_i[5:0];
   assign shamt_w = b_i[4:0];
 
-  // Intermediate results for word operations
+  // Intermediate result for word operations
   logic [31:0] word_result;
-  logic [63:0] word_extended;
 
   always_comb begin
+    word_result = '0;
     case (op_i)
       // 64-bit operations
       ALU_ADD:    result_o = a_i + b_i;
@@ -59,4 +59,4 @@ module ironcore_alu (
     endcase
   end
 
-endmodule : ironcore_alu
+endmodule : rv64xo3_alu

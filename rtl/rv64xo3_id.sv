@@ -1,13 +1,13 @@
-// IronCore ID Stage - Instruction Decode and Register File
+// riscv64xO3 ID Stage - Instruction Decode and Register File
 // Contains the 32x32 register file with x0 hardwired to zero
 
-import ironcore_pkg::*;
-module ironcore_id (
+import rv64xo3_pkg::*;
+module rv64xo3_id (
     input logic clk_i,
     input logic rst_ni,
 
     // Pipeline register input
-    input ironcore_pkg::if_id_reg_t if_id_reg_i,
+    input rv64xo3_pkg::if_id_reg_t if_id_reg_i,
 
     // Writeback interface
     input logic [REG_ADDR_W-1:0] wb_rd_addr_i,
@@ -86,4 +86,4 @@ module ironcore_id (
   endgenerate
 `endif
 
-endmodule : ironcore_id
+endmodule : rv64xo3_id

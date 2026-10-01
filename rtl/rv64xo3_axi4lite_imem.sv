@@ -1,9 +1,9 @@
-// IronCore AXI4-Lite Instruction Memory Bridge
+// riscv64xO3 AXI4-Lite Instruction Memory Bridge
 // Converts simple instruction fetch interface to AXI4-Lite master
 
-import ironcore_pkg::*;
+import rv64xo3_pkg::*;
 
-module ironcore_axi4lite_imem (
+module rv64xo3_axi4lite_imem (
     input logic clk_i,
     input logic rst_ni,
 
@@ -137,4 +137,4 @@ module ironcore_axi4lite_imem (
   ) else $error("RREADY deasserted before RVALID");
 `endif
 
-endmodule : ironcore_axi4lite_imem
+endmodule : rv64xo3_axi4lite_imem

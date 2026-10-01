@@ -1,17 +1,17 @@
-// IronCore EX Stage - Execute
+// riscv64xO3 EX Stage - Execute
 // Contains ALU, branch comparison, and MulDiv unit
 
-import ironcore_pkg::*;
-module ironcore_ex (
+import rv64xo3_pkg::*;
+module rv64xo3_ex (
     input logic clk_i,
     input logic rst_ni,
 
     // Pipeline register input
-    input ironcore_pkg::id_ex_reg_t id_ex_reg_i,
+    input rv64xo3_pkg::id_ex_reg_t id_ex_reg_i,
 
     // Forwarding inputs
-    input ironcore_pkg::fwd_sel_e            fwd_a_sel_i,
-    input ironcore_pkg::fwd_sel_e            fwd_b_sel_i,
+    input rv64xo3_pkg::fwd_sel_e            fwd_a_sel_i,
+    input rv64xo3_pkg::fwd_sel_e            fwd_b_sel_i,
     input logic                   [XLEN-1:0] fwd_ex_mem_data_i,
     input logic                   [XLEN-1:0] fwd_mem_wb_data_i,
 
@@ -61,7 +61,7 @@ module ironcore_ex (
   //--------------------------------------------------------------------------
   logic [XLEN-1:0] alu_out;
 
-  ironcore_alu u_alu (
+  rv64xo3_alu u_alu (
       .op_i    (id_ex_reg_i.alu_op),
       .a_i     (alu_a),
       .b_i     (alu_b),
@@ -112,7 +112,7 @@ module ironcore_ex (
   //--------------------------------------------------------------------------
   // Multiply/Divide Unit
   //--------------------------------------------------------------------------
-  ironcore_muldiv u_muldiv (
+  rv64xo3_muldiv u_muldiv (
       .clk_i   (clk_i),
       .rst_ni  (rst_ni),
       .start_i (id_ex_reg_i.valid && id_ex_reg_i.is_muldiv),
@@ -124,4 +124,4 @@ module ironcore_ex (
       .busy_o  (muldiv_busy_o)
   );
 
-endmodule : ironcore_ex
+endmodule : rv64xo3_ex

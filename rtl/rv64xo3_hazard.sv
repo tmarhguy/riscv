@@ -1,8 +1,8 @@
-// IronCore Hazard Detection and Forwarding Unit
+// riscv64xO3 Hazard Detection and Forwarding Unit
 // Detects data hazards and generates forwarding/stall signals
 
-import ironcore_pkg::*;
-module ironcore_hazard (
+import rv64xo3_pkg::*;
+module rv64xo3_hazard (
     // ID stage register addresses (from instruction in ID/EX)
     input logic [REG_ADDR_W-1:0] id_rs1_addr_i,
     input logic [REG_ADDR_W-1:0] id_rs2_addr_i,
@@ -29,8 +29,8 @@ module ironcore_hazard (
     output logic load_use_hazard_o,
 
     // Forwarding outputs (for EX stage operands)
-    output ironcore_pkg::fwd_sel_e fwd_a_sel_o,
-    output ironcore_pkg::fwd_sel_e fwd_b_sel_o
+    output rv64xo3_pkg::fwd_sel_e fwd_a_sel_o,
+    output rv64xo3_pkg::fwd_sel_e fwd_b_sel_o
 );
 
   //--------------------------------------------------------------------------
@@ -91,4 +91,4 @@ module ironcore_hazard (
     end
   end
 
-endmodule : ironcore_hazard
+endmodule : rv64xo3_hazard

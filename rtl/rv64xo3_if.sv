@@ -1,9 +1,9 @@
-// IronCore IF Stage - Instruction Fetch
+// riscv64xO3 IF Stage - Instruction Fetch
 // Handles PC management and instruction memory interface
 
-import ironcore_pkg::*;
-module ironcore_if #(
-    parameter logic [ironcore_pkg::XLEN-1:0] RESET_PC = 64'h8000_0000
+import rv64xo3_pkg::*;
+module rv64xo3_if #(
+    parameter logic [rv64xo3_pkg::XLEN-1:0] RESET_PC = 64'h8000_0000
 ) (
     input logic clk_i,
     input logic rst_ni,
@@ -60,7 +60,7 @@ module ironcore_if #(
     end else if (pred_taken_i && !stall_i) begin
       pc_next = pred_target_i;
     end else if (!stall_i && instr_valid_o) begin
-      pc_next = pc_reg + 32'd4;
+      pc_next = pc_reg + 64'd4;
     end else begin
       pc_next = pc_reg;
     end
@@ -139,8 +139,10 @@ module ironcore_if #(
     end else if (pc_redirect_i || flush_i) begin
       instr_buf_valid <= 1'b0;
     end else if (iwb_ack_i && stall_i) begin
-      // Buffer instruction if downstream is stalled
-      instr_buf       <= iwb_dat_i;
+      // Buffer instruction if downstream is stalled.
+      // NOTE: 64-bit bus carries one 32-bit parcel in the low word; pc[2]
+      // word-mux lands with the RVC expander (see docs/architecture.md).
+      instr_buf       <= iwb_dat_i[31:0];
       instr_buf_valid <= 1'b1;
     end else if (!stall_i && instr_buf_valid) begin
       // Clear buffer when consumed
@@ -158,7 +160,7 @@ module ironcore_if #(
       instr_o       = instr_buf;
       instr_valid_o = 1'b1;
     end else if (iwb_ack_i) begin
-      instr_o       = iwb_dat_i;
+      instr_o       = iwb_dat_i[31:0];
       instr_valid_o = 1'b1;
     end else begin
       instr_o       = '0;
@@ -169,4 +171,4 @@ module ironcore_if #(
   // Stall upstream if waiting for memory
   assign fetch_stall_o = (state == WAIT_ACK) && !iwb_ack_i;
 
-endmodule : ironcore_if
+endmodule : rv64xo3_if

@@ -1,9 +1,9 @@
-// IronCore AXI4-Lite Data Memory Bridge
+// riscv64xO3 AXI4-Lite Data Memory Bridge
 // Converts load/store interface to AXI4-Lite master (read/write)
 
-import ironcore_pkg::*;
+import rv64xo3_pkg::*;
 
-module ironcore_axi4lite_dmem (
+module rv64xo3_axi4lite_dmem (
     input logic clk_i,
     input logic rst_ni,
 
@@ -244,4 +244,4 @@ module ironcore_axi4lite_dmem (
   ) else $error("RREADY deasserted before RVALID");
 `endif
 
-endmodule : ironcore_axi4lite_dmem
+endmodule : rv64xo3_axi4lite_dmem

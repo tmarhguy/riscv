@@ -1,9 +1,9 @@
-// IronCore Top-Level Module with AXI4-Lite Interfaces
+// riscv64xO3 Top-Level Module with AXI4-Lite Interfaces
 // Alternative top module using AXI4-Lite instead of Wishbone
 
-import ironcore_pkg::*;
+import rv64xo3_pkg::*;
 
-module ironcore_top_axi #(
+module rv64xo3_top_axi #(
     parameter logic [XLEN-1:0] RESET_PC = 64'h0000_0000
 ) (
     input logic clk_i,
@@ -60,9 +60,9 @@ module ironcore_top_axi #(
   logic            dwb_ack;
 
   //--------------------------------------------------------------------------
-  // Instantiate Original IronCore with Wishbone
+  // Instantiate Original riscv64xO3 with Wishbone
   //--------------------------------------------------------------------------
-  ironcore_top #(
+  rv64xo3_top #(
       .RESET_PC(RESET_PC)
   ) u_core (
       .clk_i     (clk_i),
@@ -162,4 +162,4 @@ module ironcore_top_axi #(
       .m_axi_rresp  (m_axi_dmem_rresp)
   );
 
-endmodule : ironcore_top_axi
+endmodule : rv64xo3_top_axi

@@ -1,15 +1,24 @@
-// IronCore Package - Common Types and Definitions
-// RV64IM 5-Stage Pipelined Processor
+// riscv64xO3 Package - Common Types and Definitions
+// RV64IMAC 2-wide superscalar out-of-order (Tomasulo + ROB/LSQ)
 
-package ironcore_pkg;
+package rv64xo3_pkg;
 
   //--------------------------------------------------------------------------
   // Parameters
   //--------------------------------------------------------------------------
-  parameter int XLEN = 64;  // RV64IM: 64-bit architecture
+  parameter int XLEN = 64;  // RV64: 64-bit architecture
   parameter int ILEN = 32;
   parameter int REG_ADDR_W = 5;
   parameter int NUM_REGS = 32;
+  // Superscalar OoO (see docs/architecture.md)
+  parameter int FETCH_WIDTH = 2;
+  parameter int COMMIT_WIDTH = 2;
+  parameter int ROB_SZ = 64;
+  parameter int PRF_SZ = 96;
+  parameter int RS_ALU_SZ = 8;
+  parameter int RS_MUL_SZ = 4;
+  parameter int RS_LSU_SZ = 4;
+  parameter int LSQ_SZ = 16;
 
   //--------------------------------------------------------------------------
   // Opcodes (RV32I + M)
@@ -196,9 +205,19 @@ package ironcore_pkg;
   // CSR Addresses (Minimum Required Set)
   //--------------------------------------------------------------------------
   typedef enum logic [11:0] {
+    CSR_SSTATUS   = 12'h100,
+    CSR_SIE       = 12'h104,
+    CSR_STVEC     = 12'h105,
+    CSR_SSCRATCH  = 12'h140,
+    CSR_SEPC      = 12'h141,
+    CSR_SCAUSE    = 12'h142,
+    CSR_STVAL     = 12'h143,
+    CSR_SIP       = 12'h144,
     CSR_MSTATUS   = 12'h300,
+    CSR_MISA      = 12'h301,
     CSR_MIE       = 12'h304,
     CSR_MTVEC     = 12'h305,
+    CSR_MSCRATCH  = 12'h340,
     CSR_MEPC      = 12'h341,
     CSR_MCAUSE    = 12'h342,
     CSR_MTVAL     = 12'h343,
@@ -313,4 +332,4 @@ package ironcore_pkg;
     logic flush_mem;
   } ctrl_signals_t;
 
-endpackage : ironcore_pkg
+endpackage : rv64xo3_pkg

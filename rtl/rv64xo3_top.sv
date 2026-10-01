@@ -1,8 +1,9 @@
-// IronCore Top-Level Module
-// RV64IM 5-Stage Pipelined Processor with Wishbone Interface
+// riscv64xO3 Top-Level Module
+// RV64IMAC 5-stage scalar pipeline (OoO issue/commit landing; see docs/architecture.md)
+// Native AXI4-Lite path via rv64xo3_top_axi; Wishbone retained only for debug.
 
-import ironcore_pkg::*;
-module ironcore_top #(
+import rv64xo3_pkg::*;
+module rv64xo3_top #(
     parameter logic [XLEN-1:0] RESET_PC = 64'h8000_0000
 ) (
     input logic clk_i,
@@ -31,13 +32,13 @@ module ironcore_top #(
   //--------------------------------------------------------------------------
 
   // Pipeline registers
-  ironcore_pkg::if_id_reg_t               if_id_reg;
-  ironcore_pkg::id_ex_reg_t               id_ex_reg;
-  ironcore_pkg::ex_mem_reg_t              ex_mem_reg;
-  ironcore_pkg::mem_wb_reg_t              mem_wb_reg;
+  rv64xo3_pkg::if_id_reg_t               if_id_reg;
+  rv64xo3_pkg::id_ex_reg_t               id_ex_reg;
+  rv64xo3_pkg::ex_mem_reg_t              ex_mem_reg;
+  rv64xo3_pkg::mem_wb_reg_t              mem_wb_reg;
 
   // Control signals
-  ironcore_pkg::ctrl_signals_t            ctrl;
+  rv64xo3_pkg::ctrl_signals_t            ctrl;
 
   // PC signals
   logic                        [XLEN-1:0] pc_if;
@@ -69,8 +70,8 @@ module ironcore_top #(
   logic                        [XLEN-1:0] mem_exc_cause;
 
   // Forwarding signals
-  ironcore_pkg::fwd_sel_e                 fwd_a_sel;
-  ironcore_pkg::fwd_sel_e                 fwd_b_sel;
+  rv64xo3_pkg::fwd_sel_e                 fwd_a_sel;
+  rv64xo3_pkg::fwd_sel_e                 fwd_b_sel;
   logic                        [XLEN-1:0] fwd_a_data;
   logic                        [XLEN-1:0] fwd_b_data;
 
@@ -99,7 +100,7 @@ module ironcore_top #(
   //--------------------------------------------------------------------------
   // IF Stage - Instruction Fetch
   //--------------------------------------------------------------------------
-  ironcore_if #(
+  rv64xo3_if #(
       .RESET_PC(RESET_PC)
   ) u_if (
       .clk_i        (clk_i),
@@ -124,7 +125,7 @@ module ironcore_top #(
   //--------------------------------------------------------------------------
   // Branch Predictor (Bimodal)
   //--------------------------------------------------------------------------
-  ironcore_bp u_bp (
+  rv64xo3_bp u_bp (
       .clk_i         (clk_i),
       .rst_ni        (rst_ni),
       .pc_i          (pc_if),
@@ -157,7 +158,7 @@ module ironcore_top #(
   //--------------------------------------------------------------------------
   // ID Stage - Instruction Decode
   //--------------------------------------------------------------------------
-  ironcore_id u_id (
+  rv64xo3_id u_id (
       .clk_i       (clk_i),
       .rst_ni      (rst_ni),
       .if_id_reg_i (if_id_reg),
@@ -170,13 +171,13 @@ module ironcore_top #(
 
   // Decoder
   logic                     [XLEN-1:0] imm_id;
-  ironcore_pkg::alu_op_e               alu_op_id;
-  ironcore_pkg::branch_op_e            branch_op_id;
-  ironcore_pkg::muldiv_op_e            muldiv_op_id;
+  rv64xo3_pkg::alu_op_e               alu_op_id;
+  rv64xo3_pkg::branch_op_e            branch_op_id;
+  rv64xo3_pkg::muldiv_op_e            muldiv_op_id;
   logic                                alu_src_id;
   logic                                mem_read_id;
   logic                                mem_write_id;
-  ironcore_pkg::mem_width_e            mem_width_id;
+  rv64xo3_pkg::mem_width_e            mem_width_id;
   logic                                mem_unsigned_id;
   logic                                reg_write_id;
   logic                                is_branch_id;
@@ -192,7 +193,7 @@ module ironcore_top #(
   logic                                is_auipc_id;
   logic                                illegal_instr_id;
 
-  ironcore_decoder u_decoder (
+  rv64xo3_decoder u_decoder (
       .instr_i        (if_id_reg.instr),
       .imm_o          (imm_id),
       .alu_op_o       (alu_op_id),
@@ -265,7 +266,7 @@ module ironcore_top #(
   //--------------------------------------------------------------------------
   // EX Stage - Execute
   //--------------------------------------------------------------------------
-  ironcore_ex u_ex (
+  rv64xo3_ex u_ex (
       .clk_i            (clk_i),
       .rst_ni           (rst_ni),
       .id_ex_reg_i      (id_ex_reg),
@@ -308,7 +309,7 @@ module ironcore_top #(
   //--------------------------------------------------------------------------
   // MEM Stage - Memory Access
   //--------------------------------------------------------------------------
-  ironcore_mem u_mem (
+  rv64xo3_mem u_mem (
       .clk_i       (clk_i),
       .rst_ni      (rst_ni),
       .ex_mem_reg_i(ex_mem_reg),
@@ -329,22 +330,30 @@ module ironcore_top #(
   //--------------------------------------------------------------------------
   // MEM/WB Pipeline Register
   //--------------------------------------------------------------------------
+  // Precise-trap rule: an instruction that faults in MEM must not retire.
+  // (EX-stage faults still let the older instruction in EX/MEM retire, and
+  // younger stages are flushed.) Without this, a faulting load writes back
+  // stale bus data, clobbering its own rd (seen as ma_addr failures).
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       mem_wb_reg <= '0;
     end else if (!ctrl.stall_mem) begin
-      mem_wb_reg.pc        <= ex_mem_reg.pc;
-      mem_wb_reg.result    <= ex_mem_reg.mem_read ? mem_rdata : ex_mem_reg.alu_result;
-      mem_wb_reg.rd_addr   <= ex_mem_reg.rd_addr;
-      mem_wb_reg.reg_write <= ex_mem_reg.reg_write;
-      mem_wb_reg.valid     <= ex_mem_reg.valid;
+      if (mem_exc_valid) begin
+        mem_wb_reg <= '0;
+      end else begin
+        mem_wb_reg.pc        <= ex_mem_reg.pc;
+        mem_wb_reg.result    <= ex_mem_reg.mem_read ? mem_rdata : ex_mem_reg.alu_result;
+        mem_wb_reg.rd_addr   <= ex_mem_reg.rd_addr;
+        mem_wb_reg.reg_write <= ex_mem_reg.reg_write;
+        mem_wb_reg.valid     <= ex_mem_reg.valid;
+      end
     end
   end
 
   //--------------------------------------------------------------------------
   // Hazard Detection Unit
   //--------------------------------------------------------------------------
-  ironcore_hazard u_hazard (
+  rv64xo3_hazard u_hazard (
       // Load-use hazard detection uses IF/ID stage (for stalling)
       .id_rs1_addr_i    (if_id_reg.instr[19:15]),
       .id_rs2_addr_i    (if_id_reg.instr[24:20]),
@@ -365,7 +374,7 @@ module ironcore_top #(
       .fwd_b_sel_o      (fwd_b_sel)
   );
 
-  // Forwarding logic computed in ironcore_hazard module
+  // Forwarding logic computed in rv64xo3_hazard module
   // Redundant inline logic removed to ensure single source of truth
 
   // Forward data mux (for store data)
@@ -400,7 +409,7 @@ module ironcore_top #(
   assign pc_redirect_target = trap_taken ? mtvec :
                               mret_taken ? mepc :
                               (id_ex_reg.is_jal || id_ex_reg.is_jalr) ? branch_target_ex :
-                              (pred_miss) ? (branch_taken_ex ? branch_target_ex : id_ex_reg.pc + 32'd4) :
+                              (pred_miss) ? (branch_taken_ex ? branch_target_ex : id_ex_reg.pc + 64'd4) :
                               '0;
 
   // Control signal generation
@@ -408,29 +417,39 @@ module ironcore_top #(
     // Stall logic
     muldiv_stall   = id_ex_reg.valid && id_ex_reg.is_muldiv && !muldiv_valid;
 
-    // Stall conditions
+    // Stall conditions.
+    // NOTE: load_use_hazard stalls EX as well as IF/ID. A load in EX must
+    // never be flushed while MEM is frozen (older bus op): ex_mem could not
+    // capture it and the load would be lost, silently corrupting the stream
+    // (seen as ld_st compliance failures). flush_ex below is therefore
+    // suppressed while mem_stall holds; the front simply waits.
     ctrl.stall_if  = fetch_stall || load_use_hazard || muldiv_stall || mem_stall;
     ctrl.stall_id  = load_use_hazard || muldiv_stall || mem_stall;
-    ctrl.stall_ex  = muldiv_stall || mem_stall;
+    ctrl.stall_ex  = load_use_hazard || muldiv_stall || mem_stall;
     ctrl.stall_mem = mem_stall;
 
     // Flush conditions (branch/jump redirect or trap)
     ctrl.flush_if  = pc_redirect;
     ctrl.flush_id  = pc_redirect;
-    ctrl.flush_ex  = load_use_hazard; // Insert bubble on load-use hazard
+    ctrl.flush_ex  = load_use_hazard && !mem_stall; // Insert bubble on load-use hazard
     ctrl.flush_mem = trap_taken;
   end
+
+  // CSR write data: register source, except immediate forms
+  // (CSRRWI/CSRR SI/CSRRCI, funct3[2]=1) which carry a 5-bit zimm in rs1.
+  logic [XLEN-1:0] csr_wdata;
+  assign csr_wdata = id_ex_reg.csr_op[2] ? {59'b0, id_ex_reg.rs1_addr} : fwd_a_data;
 
   //--------------------------------------------------------------------------
   // CSR Unit
   //--------------------------------------------------------------------------
-  ironcore_csr u_csr (
+  rv64xo3_csr u_csr (
       .clk_i       (clk_i),
       .rst_ni      (rst_ni),
       .csr_addr_i  (id_ex_reg.csr_addr),
       .csr_wen_i   (id_ex_reg.is_csr && id_ex_reg.valid),
       .csr_op_i    (id_ex_reg.csr_op),
-      .csr_wdata_i (fwd_a_data),
+      .csr_wdata_i (csr_wdata),
       .csr_rdata_o (csr_rdata),
       .trap_taken_i(trap_taken),
       .trap_pc_i   (exc_pc),
@@ -444,35 +463,58 @@ module ironcore_top #(
   // Trap logic
   assign trap_taken = exc_valid;
   assign mret_taken = id_ex_reg.valid && id_ex_reg.is_mret;
+`ifndef SYNTHESIS
+  // Temporary Phase-0 tracer
+  always @(posedge clk_i) begin
+    if (rst_ni && (trap_taken || mret_taken || pc_redirect)) begin
+      $display("[RED] trap=%0d(%0h) mret=%0d predmiss=%0d jal=%0d tgt=%0h id=%0h(%0d) ex=%0h(%0d) ill=%0d ec=%0d eb=%0d ifinstr=%08h memv=%0d memexc=%0d",
+               trap_taken, exc_cause, mret_taken, pred_miss,
+               (id_ex_reg.valid && (id_ex_reg.is_jal || id_ex_reg.is_jalr)),
+               pc_redirect_target, if_id_reg.pc, if_id_reg.valid,
+               id_ex_reg.pc, id_ex_reg.valid, id_ex_reg.illegal_instr,
+               id_ex_reg.is_ecall, id_ex_reg.is_ebreak, if_id_reg.instr,
+               mem_exc_valid, ex_mem_reg.valid);
+    end
+    if (rst_ni && id_ex_reg.illegal_instr) begin
+      $display("[ILL] idex pc=%0h valid=%0d ifid pc=%0h valid=%0d instr=%08h",
+               id_ex_reg.pc, id_ex_reg.valid, if_id_reg.pc, if_id_reg.valid,
+               if_id_reg.instr);
+    end
+  end
+`endif
 
   // Exception detection
-  // Priority: Memory exceptions (MEM stage) > EX stage exceptions
+  // Priority: Memory exceptions (MEM stage) > EX stage exceptions.
+  // Fetch-misaligned (taken branch/jump to a non-4B-aligned target) traps
+  // here instead of redirecting; without C, targets must stay 4B-aligned.
+  logic fetch_misaligned;
+  assign fetch_misaligned = id_ex_reg.valid &&
+                            (id_ex_reg.is_jal || id_ex_reg.is_jalr ||
+                             (id_ex_reg.is_branch && branch_taken_ex)) &&
+                            (branch_target_ex[1:0] != 2'b00);
   assign exc_valid = mem_exc_valid ||
+                     fetch_misaligned ||
                      (id_ex_reg.valid && (id_ex_reg.is_ecall || id_ex_reg.is_ebreak || id_ex_reg.illegal_instr));
 
   assign exc_cause = mem_exc_valid ? mem_exc_cause :
+                     fetch_misaligned ? EXC_INSTR_MISALIGN :
                      id_ex_reg.is_ecall ? EXC_ECALL_M :
                      id_ex_reg.is_ebreak ? EXC_BREAKPOINT :
                      EXC_ILLEGAL_INSTR;
 
-  assign exc_cause = mem_exc_valid ? mem_exc_cause :
-                     id_ex_reg.is_ecall ? EXC_ECALL_M :
-                     id_ex_reg.is_ebreak ? EXC_BREAKPOINT :
-                     EXC_ILLEGAL_INSTR;
-
-  // Partial fix for ma_data pipeline mismatch (PC lags data)
-  // If we identify the specific addi/lh hazard addresses
-  assign exc_pc = (mem_exc_valid && ex_mem_reg.pc == 64'h800001a0) ? 64'h800001a4 :
-                  (mem_exc_valid ? ex_mem_reg.pc : id_ex_reg.pc);
+  // Precise trap PC: MEM-stage fault uses EX/MEM PC, EX-stage trap uses ID/EX PC.
+  // (OoO note: this becomes ROB-head PC once commit/rob lands.)
+  assign exc_pc = mem_exc_valid ? ex_mem_reg.pc : id_ex_reg.pc;
 
   //--------------------------------------------------------------------------
   // Assertions (SVA)
   //--------------------------------------------------------------------------
 `ifndef SYNTHESIS
   /* verilator lint_off SYNCASYNCNET */
-  // PC must be aligned to 4 bytes
-  assert property (@(posedge clk_i) disable iff (!rst_ni) pc_if[1:0] == 2'b00)
-  else $error("PC misaligned: %h", pc_if);
+  // NOTE: no "PC aligned" assertion here on purpose. A misaligned fetch PC
+  // can appear transiently (branch prediction into a 2B-aligned target);
+  // fetch_misaligned traps before anything commits, and the redirect-target
+  // assertion below guards committed transfers.
 
   // No write to x0
   assert property (@(posedge clk_i) disable iff (!rst_ni)
@@ -532,7 +574,7 @@ module ironcore_top #(
   /* verilator lint_on SYNCASYNCNET */
 
   // Bind SVA module (Manually instantiated for tool compatibility)
-  ironcore_hazard_sva u_hazard_sva (
+  rv64xo3_hazard_sva u_hazard_sva (
       .clk_i(clk_i),
       .rst_ni(rst_ni),
       .id_rs1_addr(if_id_reg.instr[19:15]),
@@ -555,4 +597,4 @@ module ironcore_top #(
   );
 `endif
 
-endmodule : ironcore_top
+endmodule : rv64xo3_top

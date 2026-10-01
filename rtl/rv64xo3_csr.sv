@@ -1,8 +1,8 @@
-// IronCore CSR Unit - Control and Status Registers
+// riscv64xO3 CSR Unit - Control and Status Registers
 // Implements minimum required CSRs for M-mode operation
 
-import ironcore_pkg::*;
-module ironcore_csr (
+import rv64xo3_pkg::*;
+module rv64xo3_csr (
     input logic clk_i,
     input logic rst_ni,
 
@@ -35,16 +35,26 @@ module ironcore_csr (
   logic [XLEN-1:0] mcause;
   logic [XLEN-1:0] mtval; // Added
   logic [XLEN-1:0] mip;
+  logic [XLEN-1:0] sscratch;
+  logic [XLEN-1:0] mscratch;
 
   // ... (Performance counters unchanged)
   logic [63:0] cycle_cnt;
   logic [63:0] instret_cnt;
 
   // ... (Constants unchanged)
-  localparam logic [XLEN-1:0] MVENDORID = 32'h0;
-  localparam logic [XLEN-1:0] MARCHID = 32'h0;
-  localparam logic [XLEN-1:0] MIMPID = 32'h0100_0001;
-  localparam logic [XLEN-1:0] MHARTID = 32'h0;
+  localparam logic [XLEN-1:0] MVENDORID = 64'h0;
+  localparam logic [XLEN-1:0] MARCHID = 64'h0;
+  localparam logic [XLEN-1:0] MIMPID = 64'h0100_0001;
+  localparam logic [XLEN-1:0] MHARTID = 64'h0;
+  // MISA: MXL=2 (RV64) + implemented extensions only (I, M).
+  // C/A/U/S are NOT claimed: claiming them would promise behavior the
+  // core does not have (riscv-tests gates U/S checks off this value).
+  localparam logic [XLEN-1:0] MISA = 64'h8000_0000_0000_1100;
+  // Read-only XL fields: RV64 hardwired (SXL=UXL=2).
+  localparam logic [XLEN-1:0] MSTATUS_RO_XL = 64'h0000_000A_0000_0000;
+  // RV64 sstatus readable mask (SD | UXL | MXR/SUM/XS/FS | SPP/SPIE/UPIE/SIE/UIE).
+  localparam logic [XLEN-1:0] SSTATUS_MASK = 64'h8000_0003_000D_E162;
 
   // ... (Bit positions unchanged)
   localparam int MieBit = 3;
@@ -56,17 +66,21 @@ module ironcore_csr (
   always_comb begin
     csr_rdata_o = '0;
     case (csr_addr_i)
-      CSR_MSTATUS:   csr_rdata_o = mstatus;
+      CSR_SSTATUS:   csr_rdata_o = (mstatus | MSTATUS_RO_XL) & SSTATUS_MASK;
+      CSR_SSCRATCH:  csr_rdata_o = sscratch;
+      CSR_MSCRATCH:  csr_rdata_o = mscratch;
+      CSR_MSTATUS:   csr_rdata_o = mstatus | MSTATUS_RO_XL;
+      CSR_MISA:      csr_rdata_o = MISA;
       CSR_MIE:       csr_rdata_o = mie;
       CSR_MTVEC:     csr_rdata_o = mtvec;
       CSR_MEPC:      csr_rdata_o = mepc;
       CSR_MCAUSE:    csr_rdata_o = mcause;
       CSR_MTVAL:     csr_rdata_o = mtval; // Added
       CSR_MIP:       csr_rdata_o = mip;
-      CSR_CYCLE:     csr_rdata_o = cycle_cnt[31:0];
-      CSR_CYCLEH:    csr_rdata_o = cycle_cnt[63:32];
-      CSR_INSTRET:   csr_rdata_o = instret_cnt[31:0];
-      CSR_INSTRETH:  csr_rdata_o = instret_cnt[63:32];
+      CSR_CYCLE:     csr_rdata_o = {32'b0, cycle_cnt[31:0]};
+      CSR_CYCLEH:    csr_rdata_o = {32'b0, cycle_cnt[63:32]};
+      CSR_INSTRET:   csr_rdata_o = {32'b0, instret_cnt[31:0]};
+      CSR_INSTRETH:  csr_rdata_o = {32'b0, instret_cnt[63:32]};
       CSR_MVENDORID: csr_rdata_o = MVENDORID;
       CSR_MARCHID:   csr_rdata_o = MARCHID;
       CSR_MIMPID:    csr_rdata_o = MIMPID;
@@ -98,6 +112,8 @@ module ironcore_csr (
       mcause  <= '0;
       mtval   <= '0; // Added
       mip     <= '0;
+      sscratch <= '0;
+      mscratch <= '0;
     end else begin
       // Trap handling
       if (trap_taken_i) begin
@@ -116,6 +132,8 @@ module ironcore_csr (
       else if (csr_wen_i) begin
         case (csr_addr_i)
           CSR_MSTATUS: mstatus <= csr_wdata_new & 64'h0000_0000_0000_0088;
+          CSR_SSCRATCH: sscratch <= csr_wdata_new;
+          CSR_MSCRATCH: mscratch <= csr_wdata_new;
           CSR_MIE:     mie <= csr_wdata_new;
           CSR_MTVEC:   mtvec <= {csr_wdata_new[XLEN-1:2], 2'b00};
           CSR_MEPC:    mepc <= {csr_wdata_new[XLEN-1:2], 2'b00};
@@ -153,4 +171,4 @@ module ironcore_csr (
   else $error("mtvec is misaligned: %h", mtvec);
 `endif
 
-endmodule : ironcore_csr
+endmodule : rv64xo3_csr

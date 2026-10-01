@@ -1,23 +1,23 @@
-// IronCore Decoder - Instruction Decode Logic
+// riscv64xO3 Decoder - Instruction Decode Logic
 // Decodes RV64IM instructions and generates control signals
 
-import ironcore_pkg::*;
-module ironcore_decoder (
+import rv64xo3_pkg::*;
+module rv64xo3_decoder (
     input logic [ILEN-1:0] instr_i,
 
     // Immediate output
     output logic [XLEN-1:0] imm_o,
 
     // ALU control
-    output ironcore_pkg::alu_op_e    alu_op_o,
-    output ironcore_pkg::branch_op_e branch_op_o,
-    output ironcore_pkg::muldiv_op_e muldiv_op_o,
+    output rv64xo3_pkg::alu_op_e    alu_op_o,
+    output rv64xo3_pkg::branch_op_e branch_op_o,
+    output rv64xo3_pkg::muldiv_op_e muldiv_op_o,
     output logic                     alu_src_o,    // 0: rs2, 1: imm
 
     // Memory control
     output logic                     mem_read_o,
     output logic                     mem_write_o,
-    output ironcore_pkg::mem_width_e mem_width_o,
+    output rv64xo3_pkg::mem_width_e mem_width_o,
     output logic                     mem_unsigned_o,
 
     // Register control
@@ -281,15 +281,15 @@ module ironcore_decoder (
           // M extension
           is_muldiv_o = 1'b1;
           case (funct3)
-            3'b000:  muldiv_op_o = ironcore_pkg::MD_MUL;
-            3'b001:  muldiv_op_o = ironcore_pkg::MD_MULH;
-            3'b010:  muldiv_op_o = ironcore_pkg::MD_MULHSU;
-            3'b011:  muldiv_op_o = ironcore_pkg::MD_MULHU;
-            3'b100:  muldiv_op_o = ironcore_pkg::MD_DIV;
-            3'b101:  muldiv_op_o = ironcore_pkg::MD_DIVU;
-            3'b110:  muldiv_op_o = ironcore_pkg::MD_REM;
-            3'b111:  muldiv_op_o = ironcore_pkg::MD_REMU;
-            default: muldiv_op_o = ironcore_pkg::MD_MUL;
+            3'b000:  muldiv_op_o = rv64xo3_pkg::MD_MUL;
+            3'b001:  muldiv_op_o = rv64xo3_pkg::MD_MULH;
+            3'b010:  muldiv_op_o = rv64xo3_pkg::MD_MULHSU;
+            3'b011:  muldiv_op_o = rv64xo3_pkg::MD_MULHU;
+            3'b100:  muldiv_op_o = rv64xo3_pkg::MD_DIV;
+            3'b101:  muldiv_op_o = rv64xo3_pkg::MD_DIVU;
+            3'b110:  muldiv_op_o = rv64xo3_pkg::MD_REM;
+            3'b111:  muldiv_op_o = rv64xo3_pkg::MD_REMU;
+            default: muldiv_op_o = rv64xo3_pkg::MD_MUL;
           endcase
         end else begin
           // Base integer operations
@@ -357,8 +357,9 @@ module ironcore_decoder (
       // FENCE (treat as NOP for now)
       //----------------------------------------------------------------------
       OP_MISC_MEM: begin
-        // FENCE is treated as NOP in this implementation
-        if (funct3 != 3'b000) begin
+        // FENCE / FENCE.I are NOPs here: single in-order pipe with no caches
+        // or store buffer, so ordering is already guaranteed.
+        if (funct3 != 3'b000 && funct3 != 3'b001) begin
           illegal_instr_o = 1'b1;
         end
       end
@@ -372,6 +373,7 @@ module ironcore_decoder (
           case (instr_i[31:20])
             12'h000: is_ecall_o = 1'b1;  // ECALL
             12'h001: is_ebreak_o = 1'b1;  // EBREAK
+            12'h102: is_mret_o = 1'b1;  // SRET: M-mode-only core treats as MRET
             12'h302: is_mret_o = 1'b1;  // MRET
             default: illegal_instr_o = 1'b1;
           endcase
@@ -420,11 +422,11 @@ module ironcore_decoder (
           // RV64M 32-bit operations
           is_muldiv_o = 1'b1;
           case (funct3)
-            3'b000:  muldiv_op_o = ironcore_pkg::MD_MULW;
-            3'b100:  muldiv_op_o = ironcore_pkg::MD_DIVW;
-            3'b101:  muldiv_op_o = ironcore_pkg::MD_DIVUW;
-            3'b110:  muldiv_op_o = ironcore_pkg::MD_REMW;
-            3'b111:  muldiv_op_o = ironcore_pkg::MD_REMUW;
+            3'b000:  muldiv_op_o = rv64xo3_pkg::MD_MULW;
+            3'b100:  muldiv_op_o = rv64xo3_pkg::MD_DIVW;
+            3'b101:  muldiv_op_o = rv64xo3_pkg::MD_DIVUW;
+            3'b110:  muldiv_op_o = rv64xo3_pkg::MD_REMW;
+            3'b111:  muldiv_op_o = rv64xo3_pkg::MD_REMUW;
             default: illegal_instr_o = 1'b1;
           endcase
         end else begin
@@ -467,4 +469,4 @@ module ironcore_decoder (
     endcase
   end
 
-endmodule : ironcore_decoder
+endmodule : rv64xo3_decoder

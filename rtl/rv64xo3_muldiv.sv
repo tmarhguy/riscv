@@ -1,15 +1,15 @@
-// IronCore MulDiv Unit - Multiply and Divide
+// riscv64xO3 MulDiv Unit - Multiply and Divide
 // Iterative implementation for RV64IM extension
 // MUL operations: 2 cycles
 // DIV operations: 65 cycles (one bit per cycle + result) for RV64
 
-import ironcore_pkg::*;
-module ironcore_muldiv (
+import rv64xo3_pkg::*;
+module rv64xo3_muldiv (
     input logic clk_i,
     input logic rst_ni,
 
     input logic                                start_i,
-    input ironcore_pkg::muldiv_op_e            op_i,
+    input rv64xo3_pkg::muldiv_op_e            op_i,
     input logic                     [XLEN-1:0] a_i,
     input logic                     [XLEN-1:0] b_i,
 
@@ -40,9 +40,14 @@ module ironcore_muldiv (
   logic [XLEN-1:0] remainder;  // Remainder
   logic [XLEN:0] temp_remainder;  // 65-bit temporary for division (RV64)
   logic [6:0] cycle_cnt;  // Cycle counter (7 bits for 64-bit division)
-  ironcore_pkg::muldiv_op_e op_reg;  // Registered operation
-  logic a_neg, b_neg;  // Sign flags
-  logic [XLEN-1:0] a_abs, b_abs;  // Absolute values
+  rv64xo3_pkg::muldiv_op_e op_reg;  // Registered operation
+  logic a_neg, b_neg;  // Latched issue-time sign flags (from a_reg/b_reg)
+  logic a_neg_issue, b_neg_issue;  // Live issue-time signs (IDLE setup only)
+  // Latched operands: a_i/b_i come from forwarding muxes and may switch
+  // mid-operation as older instructions drain. All completion-time logic
+  // (sign correction, div-by-zero, overflow) must use issue-time values.
+  logic [XLEN-1:0] a_reg, b_reg;
+  logic [XLEN-1:0] a_abs, b_abs;  // Absolute values (from live inputs at issue)
 
   // Division intermediate signals
   logic [  XLEN:0] div_rem_diff;
@@ -52,10 +57,15 @@ module ironcore_muldiv (
   //--------------------------------------------------------------------------
   // Sign Handling
   //--------------------------------------------------------------------------
-  assign a_neg = a_i[XLEN-1];
-  assign b_neg = b_i[XLEN-1];
-  assign a_abs = a_neg ? (~a_i + 1'b1) : a_i;
-  assign b_abs = b_neg ? (~b_i + 1'b1) : b_i;
+  // a_abs/b_abs sample the live inputs: only valid in IDLE at issue time,
+  // when the pipeline holds the true operands. a_neg/b_neg below are the
+  // latched issue-time signs used by all completion-time correction.
+  assign a_neg_issue = a_i[XLEN-1];
+  assign b_neg_issue = b_i[XLEN-1];
+  assign a_neg = a_reg[XLEN-1];
+  assign b_neg = b_reg[XLEN-1];
+  assign a_abs = a_neg_issue ? (~a_i + 1'b1) : a_i;
+  assign b_abs = b_neg_issue ? (~b_i + 1'b1) : b_i;
 
   //--------------------------------------------------------------------------
   // Division Logic (Combinational)
@@ -90,7 +100,7 @@ module ironcore_muldiv (
         end
       end
       MUL_COMPUTE: begin
-        if (cycle_cnt == 6'd1) begin
+        if (cycle_cnt == 7'd1) begin
           state_next = DONE;
         end
       end
@@ -119,11 +129,15 @@ module ironcore_muldiv (
       temp_remainder <= '0;
       cycle_cnt <= '0;
       op_reg    <= MD_MUL;
+      a_reg     <= '0;
+      b_reg     <= '0;
     end else begin
       case (state)
         IDLE: begin
           if (start_i) begin
             op_reg    <= op_i;
+            a_reg     <= a_i;
+            b_reg     <= b_i;
             cycle_cnt <= '0;
 
             case (op_i)
@@ -215,6 +229,8 @@ module ironcore_muldiv (
   //--------------------------------------------------------------------------
   logic [XLEN-1:0] div_result;
   logic [XLEN-1:0] rem_result;
+  logic [XLEN-1:0] raw_div_res;
+  logic [XLEN-1:0] raw_rem_res;
 
   // Handle division by zero and overflow
   logic div_by_zero;
@@ -226,8 +242,8 @@ module ironcore_muldiv (
   // 64-bit operands: 0xFFFFFFFF80000000 / 0xFFFFFFFFFFFFFFFF
   // Logic below checks full 64-bit values.
   
-  assign div_by_zero  = (op_reg == MD_DIVW || op_reg == MD_DIVUW || op_reg == MD_REMW || op_reg == MD_REMUW) ? 
-                        (b_i[31:0] == 32'd0) : (divisor == '0); // Logic depends on if divisor was loaded with 0. 
+  assign div_by_zero  = (op_reg == MD_DIVW || op_reg == MD_DIVUW || op_reg == MD_REMW || op_reg == MD_REMUW) ?
+                        (b_reg[31:0] == 32'd0) : (divisor == '0); // Logic depends on if divisor was loaded with 0. 
                         // Wait, divisor register holds ABS value. If input was 0, divisor is 0.
                         // So checking (divisor == 0) is sufficient for all signed/unsigned cases?
                         // Yes, abs(0) = 0.
@@ -235,16 +251,21 @@ module ironcore_muldiv (
                         // For 32-bit, we loaded divisor with abs(b[31:0]). If b[31:0]==0, divisor=0. Correct.
 
   // Reuse existing logic for simplicity, but refine div_overflow
-  assign div_overflow = ((op_reg == MD_DIV) && (a_i == 64'h8000_0000_0000_0000) && (b_i == 64'hFFFF_FFFF_FFFF_FFFF)) ||
-                        ((op_reg == MD_DIVW) && (a_i[31:0] == 32'h8000_0000) && (b_i[31:0] == 32'hFFFF_FFFF));
+  assign div_overflow = ((op_reg == MD_DIV) && (a_reg == 64'h8000_0000_0000_0000) && (b_reg == 64'hFFFF_FFFF_FFFF_FFFF)) ||
+                        ((op_reg == MD_DIVW) && (a_reg[31:0] == 32'h8000_0000) && (b_reg[31:0] == 32'hFFFF_FFFF));
 
   // Sign correction for signed division
   always_comb begin
     // For 32-bit ops, we need result sign extension
-    logic [XLEN-1:0] raw_div_res, raw_rem_res;
     logic is_32bit_div;
+    logic w_a_neg_all, w_b_neg_all, w_a_neg_rem;
     
     is_32bit_div = (op_reg == MD_DIVW || op_reg == MD_REMW || op_reg == MD_DIVUW || op_reg == MD_REMUW);
+    raw_div_res = '0;
+    raw_rem_res = '0;
+    w_a_neg_all = a_reg[31];
+    w_b_neg_all = b_reg[31];
+    w_a_neg_rem = a_reg[31];
 
     if ((divisor == '0) && !div_by_zero) begin
         // Fallback if logic mismatch, but divisor==0 catches it.
@@ -254,13 +275,13 @@ module ironcore_muldiv (
     if (divisor == '0) begin // divide by zero
         if (is_32bit_div) begin
             div_result = 64'hFFFF_FFFF_FFFF_FFFF;
-            rem_result = {{32{a_i[31]}}, a_i[31:0]}; // Dividend (sign-extended)
-            if (op_reg == MD_DIVUW || op_reg == MD_REMUW) begin
-               rem_result = {32'b0, a_i[31:0]}; // Unsigned dividend
-            end
+            // Remainder is the 32-bit dividend, sign-extended to XLEN
+            // (even for unsigned W ops: riscv-tests remuw #8 expects
+            // 0xFFFFFFFF80000000, not zero-extended).
+            rem_result = {{32{a_reg[31]}}, a_reg[31:0]}; // Dividend (sign-extended)
         end else begin
             div_result = 64'hFFFF_FFFF_FFFF_FFFF; 
-            rem_result = a_i;
+            rem_result = a_reg;
         end
     end else if (div_overflow) begin
         if (op_reg == MD_DIVW) begin
@@ -290,11 +311,8 @@ module ironcore_muldiv (
         end
         // RV64M 32-bit
         MD_DIVW: begin
-            logic w_a_neg, w_b_neg;
-            w_a_neg = a_i[31];
-            w_b_neg = b_i[31];
-            raw_div_res = (w_a_neg ^ w_b_neg) ? (~quotient + 1'b1) : quotient;
-            raw_rem_res = w_a_neg ? (~remainder + 1'b1) : remainder;
+            raw_div_res = (w_a_neg_all ^ w_b_neg_all) ? (~quotient + 1'b1) : quotient;
+            raw_rem_res = w_a_neg_all ? (~remainder + 1'b1) : remainder;
             div_result = {{32{raw_div_res[31]}}, raw_div_res[31:0]}; // Sign extend 32-bit result
             rem_result = {{32{raw_rem_res[31]}}, raw_rem_res[31:0]};
         end
@@ -303,9 +321,7 @@ module ironcore_muldiv (
             rem_result = {{32{remainder[31]}}, remainder[31:0]};
         end
         MD_REMW: begin
-             logic w_a_neg;
-             w_a_neg = a_i[31];
-             raw_rem_res = w_a_neg ? (~remainder + 1'b1) : remainder;
+             raw_rem_res = w_a_neg_rem ? (~remainder + 1'b1) : remainder;
              div_result = quotient; // Don't care
              rem_result = {{32{raw_rem_res[31]}}, raw_rem_res[31:0]};
         end
@@ -347,4 +363,4 @@ module ironcore_muldiv (
   assign valid_o = (state == DONE);
   assign busy_o  = (state != IDLE) && (state != DONE);
 
-endmodule : ironcore_muldiv
+endmodule : rv64xo3_muldiv
