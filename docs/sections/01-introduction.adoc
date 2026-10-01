@@ -1,7 +1,7 @@
 [[ch-intro]]
 == Introduction
 
-Atlas is a 64-bit superscalar out-of-order RISC-V project and core.
+riscv64xO3 is a 64-bit superscalar out-of-order RISC-V project and core.
 Target ISA: *RV64IMAC + Zicsr/Zifencei*.
 The core fetches, decodes, issues, and commits two instructions per cycle,
 using Tomasulo reservation stations with in-order ROB commit.
@@ -31,8 +31,7 @@ it does not duplicate this content.
 
 === Canonical vocabulary
 
-* *Atlas* is the 64-bit superscalar out-of-order RISC-V project and core.
-  RTL sources carry the `rv64xo3_*` module prefix.
+* *riscv64xO3* is the 64-bit superscalar out-of-order RISC-V project and core.
 * *RTL simulation* means Verilator-driven simulation of `rtl/`.
   Label its results as simulation, never silicon or board execution.
 * *Compliance* means the `riscv-tests` ISA suites run against the RTL model.

@@ -1,4 +1,4 @@
-= Atlas: 64-bit Out-of-Order Superscalar RISC-V Core (RV64IMAC) — Technical Reference Manual
+= 64-bit Out-of-Order Superscalar RISC-V Core (RV64IMAC) — Technical Reference Manual
 Tyrone Marhguy
 v0.1, 2026-10-01
 :toc: left
