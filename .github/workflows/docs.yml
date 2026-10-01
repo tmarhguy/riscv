@@ -46,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: guardrails
     permissions:
+      contents: read # checkout needs this; job keys replace top-level
       pages: write # configure-pages needs this on the token
     steps:
       - name: Checkout
