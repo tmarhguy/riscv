@@ -1,6 +1,6 @@
 """
 riscv64xO3 Cocotb Test Suite
-Smoke tests and integration tests for the RV32IM processor
+Smoke tests and integration tests for the RV64IM scalar pipeline
 """
 
 import cocotb

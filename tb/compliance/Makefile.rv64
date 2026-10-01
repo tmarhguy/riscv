@@ -44,10 +44,15 @@ RV64UM_TESTS = \
 	mulw divw divuw remw remuw
 
 # RV64MI test list (privileged + trap behavior; only existing binaries)
+# Note: pmpaddr excluded (no PMP unit yet); misaligned trap tests exercise
+# the MEM trap path with mtval/mepc checks.
 RV64MI_TESTS = \
 	breakpoint csr \
 	illegal mcsr scall \
-	zicntr
+	zicntr sbreak \
+	ld-misaligned lh-misaligned lw-misaligned \
+	sd-misaligned sh-misaligned sw-misaligned \
+	ma_addr ma_fetch
 
 .PHONY: all run clean rv64ui rv64um rv64mi check-env
 
