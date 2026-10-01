@@ -1,10 +1,10 @@
-// IronCore Verilator Testbench with Test Runner
+// riscv64xO3 Verilator Testbench with Test Runner
 // Loads test binaries and checks TOHOST for pass/fail
 
 #include <verilated.h>
 #include <verilated_fst_c.h>
 #include <verilated_cov.h>
-#include "Vironcore_top.h"
+#include "Vrv64xo3_top.h"
 
 #include <memory>
 #include <iostream>
@@ -15,7 +15,11 @@
 #include <cstring>
 
 // Memory-mapped test interface addresses
-constexpr uint32_t TOHOST_ADDR   = 0x80001000;
+// Default tohost; compliance runners override per-test via --tohost because
+// riscv-tests links .tohost right after .text.init, so its address moves
+// with test size (e.g. 0x80001000 for small tests, 0x80002000 for ld_st).
+// The exact address is the `tohost` symbol in each test ELF.
+constexpr uint32_t TOHOST_DEFAULT = 0x80001000;
 constexpr uint32_t FROMHOST_ADDR = 0x80001004;
 constexpr uint32_t UART_ADDR     = 0x10000000;
 
@@ -34,8 +38,15 @@ public:
         return addr >= base_addr && addr < base_addr + size;
     }
 
+    // Bus transactions use absolute addresses; test setup code uses small
+    // base-relative offsets (e.g. write_word(0x00, ...)). Normalize both to
+    // a backing-store offset so setup writes land where the core fetches.
+    uint32_t to_offset(uint32_t addr) const {
+        return (addr < base_addr) ? addr : addr - base_addr;
+    }
+
     void write_double(uint32_t addr, uint64_t val) {
-        uint32_t offset = addr - base_addr;
+        uint32_t offset = to_offset(addr);
         if (offset + 7 < size) {
             for (int i = 0; i < 8; i++) {
                 data[offset + i] = (val >> (i * 8)) & 0xFF;
@@ -44,7 +55,7 @@ public:
     }
 
     void write_word(uint32_t addr, uint32_t val) {
-        uint32_t offset = addr - base_addr;
+        uint32_t offset = to_offset(addr);
         if (offset + 3 < size) {
             data[offset + 0] = val & 0xFF;
             data[offset + 1] = (val >> 8) & 0xFF;
@@ -54,14 +65,14 @@ public:
     }
 
     void write_byte(uint32_t addr, uint8_t val) {
-        uint32_t offset = addr - base_addr;
+        uint32_t offset = to_offset(addr);
         if (offset < size) {
             data[offset] = val;
         }
     }
 
     uint64_t read_double(uint32_t addr) const {
-        uint32_t offset = addr - base_addr;
+        uint32_t offset = (addr < base_addr) ? addr : addr - base_addr;
         if (offset + 7 < size) {
             uint64_t val = 0;
             for (int i = 0; i < 8; i++) {
@@ -73,7 +84,7 @@ public:
     }
 
     uint32_t read_word(uint32_t addr) const {
-        uint32_t offset = addr - base_addr;
+        uint32_t offset = (addr < base_addr) ? addr : addr - base_addr;
         if (offset + 3 < size) {
             return data[offset + 0] |
                    (data[offset + 1] << 8) |
@@ -94,7 +105,7 @@ public:
         size_t file_size = file.tellg();
         file.seekg(0, std::ios::beg);
 
-        uint32_t offset = load_addr - base_addr;
+        uint32_t offset = (load_addr < base_addr) ? load_addr : load_addr - base_addr;
         if (offset + file_size > size) {
             std::cerr << "Error: Binary too large for memory" << std::endl;
             return false;
@@ -107,14 +118,17 @@ public:
     }
 };
 
-class IronCoreTestbench {
+class riscv64xO3Testbench {
 public:
-    std::unique_ptr<Vironcore_top> dut;
+    std::unique_ptr<Vrv64xo3_top> dut;
     std::unique_ptr<VerilatedFstC> trace;
-    Memory imem;
-    Memory dmem;
+    // Unified memory: a single SRAM image serves both instruction and data
+    // ports (like real hardware). Split I/D images would make fence.i and
+    // self-modifying code unobservable to the fetch port.
+    Memory mem;
     uint64_t sim_time;
     uint64_t tohost_value;  // Changed to 64-bit
+    uint32_t tohost_addr;   // Watched completion address (see --tohost)
     bool test_finished;
     bool enable_trace;
     
@@ -126,11 +140,12 @@ public:
     bool imem_pending;         // Transaction pending
     bool dmem_pending;         // Transaction pending
 
-    IronCoreTestbench(bool trace_en = true, int imem_ws = 0, int dmem_ws = 0)
-        : imem(0x80000000, 128 * 1024),  // 128KB ROM/RAM at 0x80000000
-          dmem(0x80000000, 128 * 1024),  // 128KB RAM at 0x80000000
+    riscv64xO3Testbench(bool trace_en = true, int imem_ws = 0, int dmem_ws = 0,
+                        uint32_t tohost = TOHOST_DEFAULT)
+        : mem(0x80000000, 128 * 1024),  // 128KB unified SRAM at 0x80000000
           sim_time(0),
           tohost_value(0),
+          tohost_addr(tohost),
           test_finished(false),
           enable_trace(trace_en),
           imem_wait_states(imem_ws),
@@ -140,7 +155,7 @@ public:
           imem_pending(false),
           dmem_pending(false)
     {
-        dut = std::make_unique<Vironcore_top>();
+        dut = std::make_unique<Vrv64xo3_top>();
 
         if (enable_trace) {
             Verilated::traceEverOn(true);
@@ -149,7 +164,7 @@ public:
         }
     }
 
-    ~IronCoreTestbench() {
+    ~riscv64xO3Testbench() {
         if (trace) {
             trace->close();
         }
@@ -212,14 +227,12 @@ public:
                 // Ready to respond
                 uint32_t addr = dut->iwb_adr_o;
                 // Verilator might output 64-bit addresses, mask if needed
-                if (imem.in_range(addr)) {
+                if (mem.in_range(addr)) {
                     // Start of 64-bit fetch support
                     // Since I-cache/Fetch is usually 32-bit for RV64IM (unless compressed)
-                    // we return 32-bit instruction or 64-bit? 
-                    // IronCore instruction fetch is 32-bit (ILEN=32).
-                    dut->iwb_dat_i = imem.read_word(addr);
-                } else if (dmem.in_range(addr)) {
-                    dut->iwb_dat_i = dmem.read_word(addr);
+                    // we return 32-bit instruction or 64-bit?
+                    // riscv64xO3 instruction fetch is 32-bit (ILEN=32).
+                    dut->iwb_dat_i = mem.read_word(addr);
                 } else {
                     dut->iwb_dat_i = 0;
                 }
@@ -235,7 +248,7 @@ public:
         if (dut->dwb_cyc_o && dut->dwb_stb_o) {
             uint32_t addr = dut->dwb_adr_o;
 
-            if (debug || addr == TOHOST_ADDR) {
+            if (debug || addr == tohost_addr) {
                 printf("[%llu] DATA: addr=%08x we=%d data=%016lx sel=%02x\n",
                        sim_time/2, addr, dut->dwb_we_o, (uint64_t)dut->dwb_dat_o, dut->dwb_sel_o);
             }
@@ -257,12 +270,12 @@ public:
                     uint64_t data = dut->dwb_dat_o;
                     uint8_t sel = dut->dwb_sel_o;
 
-                    if (dmem.in_range(addr)) {
-                        uint32_t offset = addr - dmem.base_addr;
+                    if (mem.in_range(addr)) {
+                        uint32_t offset = mem.to_offset(addr);
                         for (int i = 0; i < 8; i++) {
                             if (sel & (1 << i)) {
-                                if (offset + i < dmem.size)
-                                    dmem.data[offset + i] = (data >> (i * 8)) & 0xFF;
+                                if (offset + i < mem.size)
+                                    mem.data[offset + i] = (data >> (i * 8)) & 0xFF;
                             }
                         }
                     } else if ((addr & 0xFFFF0000) == UART_ADDR) {
@@ -273,7 +286,7 @@ public:
                     }
 
                     // Check for TOHOST write
-                    if (addr == TOHOST_ADDR) {
+                    if (addr == tohost_addr) {
                         // For 32-bit writes to 64-bit TOHOST, we might need to handle byte enables
                         // But typically tests write full words/doublewords.
                         // If it's a 32-bit write (SW), the upper 32 bits might not be written?
@@ -291,8 +304,8 @@ public:
                     }
                 } else {
                     // Read operation
-                    if (dmem.in_range(addr)) {
-                        dut->dwb_dat_i = dmem.read_double(addr);
+                    if (mem.in_range(addr)) {
+                        dut->dwb_dat_i = mem.read_double(addr);
                     } else {
                         dut->dwb_dat_i = 0;
                     }
@@ -325,8 +338,9 @@ public:
         }
 
         // Decode result
-        // 1 is standard PASS. 1337 (0x539) is seemingly used by this compliance build.
-        if (tohost_value == TEST_PASS || tohost_value == 1337) {
+        // 1 is standard PASS. Anything else (fail code or trap-spin
+        // signature) is a failure: LSB = 0 means fail, upper bits = test no.
+        if (tohost_value == TEST_PASS) {
             return 0;  // PASS
         } else {
             // LSB = 0 means fail, upper bits = test number
@@ -344,6 +358,8 @@ void print_usage(const char* prog) {
     std::cout << "  --imem-ws <n>       Instruction memory wait states (default: 0)" << std::endl;
     std::cout << "  --dmem-ws <n>       Data memory wait states (default: 0)" << std::endl;
     std::cout << "  --suite <name>      Run built-in test suite: control, lsu, all" << std::endl;
+    std::cout << "  --tohost <addr>     Completion-signal address (default 0x80001000;" << std::endl;
+    std::cout << "                      use the test ELF's `tohost` symbol for compliance)" << std::endl;
     std::cout << "  --help              Show this help" << std::endl;
 }
 
@@ -360,6 +376,7 @@ int main(int argc, char** argv) {
     bool debug = false;
     int imem_ws = 0;
     int dmem_ws = 0;
+    uint32_t tohost_arg = TOHOST_DEFAULT;
 
     // Parse arguments
     for (int i = 1; i < argc; i++) {
@@ -375,6 +392,8 @@ int main(int argc, char** argv) {
             dmem_ws = std::stoi(argv[++i]);
         } else if (arg == "--suite" && i + 1 < argc) {
             test_suite = argv[++i];
+        } else if (arg == "--tohost" && i + 1 < argc) {
+            tohost_arg = static_cast<uint32_t>(std::stoul(argv[++i], nullptr, 0));
         } else if (arg == "--help") {
             print_usage(argv[0]);
             return 0;
@@ -397,7 +416,7 @@ int main(int argc, char** argv) {
 
         // Lambda to run a test
         auto run_test = [&](const std::string& name, auto setup_fn) -> bool {
-            IronCoreTestbench tb(enable_trace, imem_ws, dmem_ws);
+            riscv64xO3Testbench tb(enable_trace, imem_ws, dmem_ws);
             tb.debug = debug;
             if (enable_trace) {
                 tb.open_trace("waves/" + name + ".fst");
@@ -406,7 +425,7 @@ int main(int argc, char** argv) {
             // Initialize memory with NOPs
             uint32_t nop = 0x00000013;  // addi x0, x0, 0
             for (int i = 0; i < 4096; i += 4) {
-                tb.imem.write_word(i, nop);
+                tb.mem.write_word(i, nop);
             }
             
             setup_fn(tb);
@@ -434,7 +453,7 @@ int main(int argc, char** argv) {
         // Wait, replace_file_content replaces the WHOLE BLOCK from StartLine to EndLine.
         // I need to be careful not to delete the test definitions.
         // The block I selected covers Lines 323 to 340 (which is the end of lambda?)
-        // No, line 340 is end of class IronCoreTestbench in previous view? 
+        // No, line 340 is end of class riscv64xO3Testbench in previous view? 
         // Let me re-verify line numbers.
 
 
@@ -444,39 +463,39 @@ int main(int argc, char** argv) {
         if (test_suite == "control" || test_suite == "all") {
             std::cout << "\n=== Phase 3: Control Flow Tests ===" << std::endl;
             
-            run_test("ctrl_beq_taken", [](IronCoreTestbench& tb) {
+            run_test("ctrl_beq_taken", [](riscv64xO3Testbench& tb) {
                 // BEQ taken: x1=5, x2=5, branch should be taken
-                tb.imem.write_word(0x00, 0x00500093);  // addi x1, x0, 5
-                tb.imem.write_word(0x04, 0x00500113);  // addi x2, x0, 5
-                tb.imem.write_word(0x08, 0x00208663);  // beq x1, x2, +12 (to 0x14)
-                tb.imem.write_word(0x0C, 0x00400193);  // addi x3, x0, 4  (FAIL - skipped)
-                tb.imem.write_word(0x10, 0x0080006F);  // jal x0, +8 (to 0x18)
-                tb.imem.write_word(0x14, 0x00100193);  // addi x3, x0, 1  (PASS)
-                tb.imem.write_word(0x18, 0x80001237);  // lui x4, 0x80001
-                tb.imem.write_word(0x1C, 0x00322023);  // sw x3, 0(x4)
-                tb.imem.write_word(0x20, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x00500093);  // addi x1, x0, 5
+                tb.mem.write_word(0x04, 0x00500113);  // addi x2, x0, 5
+                tb.mem.write_word(0x08, 0x00208663);  // beq x1, x2, +12 (to 0x14)
+                tb.mem.write_word(0x0C, 0x00400193);  // addi x3, x0, 4  (FAIL - skipped)
+                tb.mem.write_word(0x10, 0x0080006F);  // jal x0, +8 (to 0x18)
+                tb.mem.write_word(0x14, 0x00100193);  // addi x3, x0, 1  (PASS)
+                tb.mem.write_word(0x18, 0x80001237);  // lui x4, 0x80001
+                tb.mem.write_word(0x1C, 0x00322023);  // sw x3, 0(x4)
+                tb.mem.write_word(0x20, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("ctrl_beq_not_taken", [](IronCoreTestbench& tb) {
+            run_test("ctrl_beq_not_taken", [](riscv64xO3Testbench& tb) {
                 // BEQ not taken: x1=5, x2=6, branch should NOT be taken
-                tb.imem.write_word(0x00, 0x00500093);  // addi x1, x0, 5
-                tb.imem.write_word(0x04, 0x00600113);  // addi x2, x0, 6
-                tb.imem.write_word(0x08, 0x00208663);  // beq x1, x2, +12 (NOT taken)
-                tb.imem.write_word(0x0C, 0x00100193);  // addi x3, x0, 1  (PASS - executed)
-                tb.imem.write_word(0x10, 0x80001237);  // lui x4, 0x80001
-                tb.imem.write_word(0x14, 0x00322023);  // sw x3, 0(x4)
-                tb.imem.write_word(0x18, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x00500093);  // addi x1, x0, 5
+                tb.mem.write_word(0x04, 0x00600113);  // addi x2, x0, 6
+                tb.mem.write_word(0x08, 0x00208663);  // beq x1, x2, +12 (NOT taken)
+                tb.mem.write_word(0x0C, 0x00100193);  // addi x3, x0, 1  (PASS - executed)
+                tb.mem.write_word(0x10, 0x80001237);  // lui x4, 0x80001
+                tb.mem.write_word(0x14, 0x00322023);  // sw x3, 0(x4)
+                tb.mem.write_word(0x18, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("ctrl_jal", [](IronCoreTestbench& tb) {
+            run_test("ctrl_jal", [](riscv64xO3Testbench& tb) {
                 // JAL: jump forward and link
-                tb.imem.write_word(0x00, 0x00C000EF);  // jal x1, +12 (to 0x0C), x1=0x04
-                tb.imem.write_word(0x04, 0x00400193);  // addi x3, x0, 4  (FAIL - skipped)
-                tb.imem.write_word(0x08, 0x0100006F);  // jal x0, +16 (to 0x18)
-                tb.imem.write_word(0x0C, 0x00100193);  // addi x3, x0, 1  (PASS)
-                tb.imem.write_word(0x10, 0x80001237);  // lui x4, 0x80001
-                tb.imem.write_word(0x14, 0x00322023);  // sw x3, 0(x4)
-                tb.imem.write_word(0x18, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x00C000EF);  // jal x1, +12 (to 0x0C), x1=0x04
+                tb.mem.write_word(0x04, 0x00400193);  // addi x3, x0, 4  (FAIL - skipped)
+                tb.mem.write_word(0x08, 0x0100006F);  // jal x0, +16 (to 0x18)
+                tb.mem.write_word(0x0C, 0x00100193);  // addi x3, x0, 1  (PASS)
+                tb.mem.write_word(0x10, 0x80001237);  // lui x4, 0x80001
+                tb.mem.write_word(0x14, 0x00322023);  // sw x3, 0(x4)
+                tb.mem.write_word(0x18, 0x0000006F);  // jal x0, 0
             });
         }
         // ================================================================
@@ -485,7 +504,7 @@ int main(int argc, char** argv) {
         if (test_suite == "lsu" || test_suite == "all") {
             std::cout << "\n=== Phase 4: Load/Store Unit Tests ===" << std::endl;
 
-            run_test("lsu_sw_lw", [](IronCoreTestbench& tb) {
+            run_test("lsu_sw_lw", [](riscv64xO3Testbench& tb) {
                 // SW/LW: Store value 42 to RAM, load it back, verify
                 // 0x00: addi x1, x0, 42         ; x1 = 42
                 // 0x04: lui  x2, 0x80000        ; x2 = 0x80000000 (RAM base)
@@ -497,19 +516,19 @@ int main(int argc, char** argv) {
                 // 0x1C: lui  x5, 0x80001        ; TOHOST address
                 // 0x20: sw   x4, 0(x5)          ; write result
                 // 0x24: jal  x0, 0              ; loop
-                tb.imem.write_word(0x00, 0x02A00093);  // addi x1, x0, 42
-                tb.imem.write_word(0x04, 0x80000137);  // lui x2, 0x80000
-                tb.imem.write_word(0x08, 0x00112023);  // sw x1, 0(x2)
-                tb.imem.write_word(0x0C, 0x00012183);  // lw x3, 0(x2)
-                tb.imem.write_word(0x10, 0x00308463);  // beq x1, x3, +8
-                tb.imem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
-                tb.imem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
-                tb.imem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
-                tb.imem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
-                tb.imem.write_word(0x24, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x02A00093);  // addi x1, x0, 42
+                tb.mem.write_word(0x04, 0x80000137);  // lui x2, 0x80000
+                tb.mem.write_word(0x08, 0x00112023);  // sw x1, 0(x2)
+                tb.mem.write_word(0x0C, 0x00012183);  // lw x3, 0(x2)
+                tb.mem.write_word(0x10, 0x00308463);  // beq x1, x3, +8
+                tb.mem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
+                tb.mem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
+                tb.mem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
+                tb.mem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
+                tb.mem.write_word(0x24, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("lsu_sb_lbu", [](IronCoreTestbench& tb) {
+            run_test("lsu_sb_lbu", [](riscv64xO3Testbench& tb) {
                 // SB/LBU: Store 0xFF byte, load unsigned, verify zero extension
                 // 0x00: lui  x2, 0x80000        ; x2 = RAM base
                 // 0x04: addi x1, x0, 255        ; x1 = 0xFF
@@ -521,19 +540,19 @@ int main(int argc, char** argv) {
                 // 0x1C: lui  x5, 0x80001
                 // 0x20: sw   x4, 0(x5)
                 // 0x24: jal  x0, 0
-                tb.imem.write_word(0x00, 0x80000137);  // lui x2, 0x80000
-                tb.imem.write_word(0x04, 0x0FF00093);  // addi x1, x0, 0xFF (255)
-                tb.imem.write_word(0x08, 0x00110023);  // sb x1, 0(x2)
-                tb.imem.write_word(0x0C, 0x00014183);  // lbu x3, 0(x2)
-                tb.imem.write_word(0x10, 0x00308463);  // beq x1, x3, +8
-                tb.imem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
-                tb.imem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
-                tb.imem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
-                tb.imem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
-                tb.imem.write_word(0x24, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x80000137);  // lui x2, 0x80000
+                tb.mem.write_word(0x04, 0x0FF00093);  // addi x1, x0, 0xFF (255)
+                tb.mem.write_word(0x08, 0x00110023);  // sb x1, 0(x2)
+                tb.mem.write_word(0x0C, 0x00014183);  // lbu x3, 0(x2)
+                tb.mem.write_word(0x10, 0x00308463);  // beq x1, x3, +8
+                tb.mem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
+                tb.mem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
+                tb.mem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
+                tb.mem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
+                tb.mem.write_word(0x24, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("lsu_sh_lhu", [](IronCoreTestbench& tb) {
+            run_test("lsu_sh_lhu", [](riscv64xO3Testbench& tb) {
                 // SH/LHU: Store 0x1234, load unsigned halfword
                 // 0x00: lui  x2, 0x80000        ; x2 = RAM base
                 // 0x04: lui  x1, 0x1            ; x1 = 0x1000
@@ -546,20 +565,20 @@ int main(int argc, char** argv) {
                 // 0x20: lui  x5, 0x80001
                 // 0x24: sw   x4, 0(x5)
                 // 0x28: jal  x0, 0
-                tb.imem.write_word(0x00, 0x80000137);  // lui x2, 0x80000
-                tb.imem.write_word(0x04, 0x000010B7);  // lui x1, 0x1
-                tb.imem.write_word(0x08, 0x23408093);  // addi x1, x1, 0x234
-                tb.imem.write_word(0x0C, 0x00111023);  // sh x1, 0(x2)
-                tb.imem.write_word(0x10, 0x00015183);  // lhu x3, 0(x2)
-                tb.imem.write_word(0x14, 0x00308463);  // beq x1, x3, +8
-                tb.imem.write_word(0x18, 0x00400213);  // addi x4, x0, 4 (FAIL)
-                tb.imem.write_word(0x1C, 0x00100213);  // addi x4, x0, 1 (PASS)
-                tb.imem.write_word(0x20, 0x800012B7);  // lui x5, 0x80001
-                tb.imem.write_word(0x24, 0x0042A023);  // sw x4, 0(x5)
-                tb.imem.write_word(0x28, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x80000137);  // lui x2, 0x80000
+                tb.mem.write_word(0x04, 0x000010B7);  // lui x1, 0x1
+                tb.mem.write_word(0x08, 0x23408093);  // addi x1, x1, 0x234
+                tb.mem.write_word(0x0C, 0x00111023);  // sh x1, 0(x2)
+                tb.mem.write_word(0x10, 0x00015183);  // lhu x3, 0(x2)
+                tb.mem.write_word(0x14, 0x00308463);  // beq x1, x3, +8
+                tb.mem.write_word(0x18, 0x00400213);  // addi x4, x0, 4 (FAIL)
+                tb.mem.write_word(0x1C, 0x00100213);  // addi x4, x0, 1 (PASS)
+                tb.mem.write_word(0x20, 0x800012B7);  // lui x5, 0x80001
+                tb.mem.write_word(0x24, 0x0042A023);  // sw x4, 0(x5)
+                tb.mem.write_word(0x28, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("lsu_store_load_offset", [](IronCoreTestbench& tb) {
+            run_test("lsu_store_load_offset", [](riscv64xO3Testbench& tb) {
                 // Test store/load with offset: store 100 at offset 8, load it back
                 // 0x00: lui  x2, 0x80000        ; x2 = RAM base
                 // 0x04: addi x1, x0, 100        ; x1 = 100
@@ -571,19 +590,19 @@ int main(int argc, char** argv) {
                 // 0x1C: lui  x5, 0x80001
                 // 0x20: sw   x4, 0(x5)
                 // 0x24: jal  x0, 0
-                tb.imem.write_word(0x00, 0x80000137);  // lui x2, 0x80000
-                tb.imem.write_word(0x04, 0x06400093);  // addi x1, x0, 100
-                tb.imem.write_word(0x08, 0x00112423);  // sw x1, 8(x2)
-                tb.imem.write_word(0x0C, 0x00812183);  // lw x3, 8(x2)
-                tb.imem.write_word(0x10, 0x00308463);  // beq x1, x3, +8
-                tb.imem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
-                tb.imem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
-                tb.imem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
-                tb.imem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
-                tb.imem.write_word(0x24, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x80000137);  // lui x2, 0x80000
+                tb.mem.write_word(0x04, 0x06400093);  // addi x1, x0, 100
+                tb.mem.write_word(0x08, 0x00112423);  // sw x1, 8(x2)
+                tb.mem.write_word(0x0C, 0x00812183);  // lw x3, 8(x2)
+                tb.mem.write_word(0x10, 0x00308463);  // beq x1, x3, +8
+                tb.mem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
+                tb.mem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
+                tb.mem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
+                tb.mem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
+                tb.mem.write_word(0x24, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("lsu_back_to_back", [](IronCoreTestbench& tb) {
+            run_test("lsu_back_to_back", [](riscv64xO3Testbench& tb) {
                 // Back-to-back stores and loads: store 5 and 10, load both, add
                 // 0x00: lui  x3, 0x80000        ; x3 = RAM base
                 // 0x04: addi x1, x0, 5          ; x1 = 5
@@ -600,21 +619,21 @@ int main(int argc, char** argv) {
                 // 0x30: lui  x9, 0x80001
                 // 0x34: sw   x8, 0(x9)
                 // 0x38: jal  x0, 0
-                tb.imem.write_word(0x00, 0x800001B7);  // lui x3, 0x80000
-                tb.imem.write_word(0x04, 0x00500093);  // addi x1, x0, 5
-                tb.imem.write_word(0x08, 0x00A00113);  // addi x2, x0, 10
-                tb.imem.write_word(0x0C, 0x0011A023);  // sw x1, 0(x3)
-                tb.imem.write_word(0x10, 0x0021A223);  // sw x2, 4(x3)
-                tb.imem.write_word(0x14, 0x0001A203);  // lw x4, 0(x3)
-                tb.imem.write_word(0x18, 0x0041A283);  // lw x5, 4(x3)
-                tb.imem.write_word(0x1C, 0x00520333);  // add x6, x4, x5
-                tb.imem.write_word(0x20, 0x00F00393);  // addi x7, x0, 15
-                tb.imem.write_word(0x24, 0x00730463);  // beq x6, x7, +8
-                tb.imem.write_word(0x28, 0x00400413);  // addi x8, x0, 4 (FAIL)
-                tb.imem.write_word(0x2C, 0x00100413);  // addi x8, x0, 1 (PASS)
-                tb.imem.write_word(0x30, 0x800014B7);  // lui x9, 0x80001
-                tb.imem.write_word(0x34, 0x0084A023);  // sw x8, 0(x9)
-                tb.imem.write_word(0x38, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x800001B7);  // lui x3, 0x80000
+                tb.mem.write_word(0x04, 0x00500093);  // addi x1, x0, 5
+                tb.mem.write_word(0x08, 0x00A00113);  // addi x2, x0, 10
+                tb.mem.write_word(0x0C, 0x0011A023);  // sw x1, 0(x3)
+                tb.mem.write_word(0x10, 0x0021A223);  // sw x2, 4(x3)
+                tb.mem.write_word(0x14, 0x0001A203);  // lw x4, 0(x3)
+                tb.mem.write_word(0x18, 0x0041A283);  // lw x5, 4(x3)
+                tb.mem.write_word(0x1C, 0x00520333);  // add x6, x4, x5
+                tb.mem.write_word(0x20, 0x00F00393);  // addi x7, x0, 15
+                tb.mem.write_word(0x24, 0x00730463);  // beq x6, x7, +8
+                tb.mem.write_word(0x28, 0x00400413);  // addi x8, x0, 4 (FAIL)
+                tb.mem.write_word(0x2C, 0x00100413);  // addi x8, x0, 1 (PASS)
+                tb.mem.write_word(0x30, 0x800014B7);  // lui x9, 0x80001
+                tb.mem.write_word(0x34, 0x0084A023);  // sw x8, 0(x9)
+                tb.mem.write_word(0x38, 0x0000006F);  // jal x0, 0
             });
         }
 
@@ -624,10 +643,10 @@ int main(int argc, char** argv) {
         if (test_suite == "traps" || test_suite == "all") {
             std::cout << "\n=== Phase 5: Traps/CSR Tests ===" << std::endl;
 
-            run_test("trap_ecall", [](IronCoreTestbench& tb) {
+            run_test("trap_ecall", [](riscv64xO3Testbench& tb) {
                 // Test ECALL trap: Set up trap handler, trigger ECALL, verify handler runs
-                // Trap handler at 0x100: writes PASS to TOHOST
-                // Main code at 0x00: set mtvec to 0x100, ecall, then write FAIL if not trapped
+                // Trap handler at 0x80000100: writes PASS to TOHOST
+                // Main code at 0x80000000: set mtvec to 0x80000100, ecall, then write FAIL if not trapped
                 //
                 // --- Main code ---
                 // 0x00: lui x1, 0x0             ; x1 = 0 (trap handler addr lower)
@@ -646,142 +665,145 @@ int main(int argc, char** argv) {
                 // 0x10C: jal x0, 0
 
                 // Main code - with NOPs after CSR write for pipeline to settle
-                tb.imem.write_word(0x00, 0x000000B7);  // lui x1, 0
-                tb.imem.write_word(0x04, 0x10008093);  // addi x1, x1, 0x100
-                tb.imem.write_word(0x08, 0x30509073);  // csrw mtvec, x1
-                tb.imem.write_word(0x0C, 0x00000013);  // nop
-                tb.imem.write_word(0x10, 0x00000013);  // nop
-                tb.imem.write_word(0x14, 0x00000013);  // nop
-                tb.imem.write_word(0x18, 0x00000073);  // ecall
-                tb.imem.write_word(0x1C, 0x00400113);  // addi x2, x0, 4 (FAIL)
-                tb.imem.write_word(0x20, 0x800011B7);  // lui x3, 0x80001
-                tb.imem.write_word(0x24, 0x0021A023);  // sw x2, 0(x3)
-                tb.imem.write_word(0x28, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x800000B7);  // lui x1, 0x80000 (mtvec base 0x80000000)
+                tb.mem.write_word(0x04, 0x10008093);  // addi x1, x1, 0x100
+                tb.mem.write_word(0x08, 0x30509073);  // csrw mtvec, x1
+                tb.mem.write_word(0x0C, 0x00000013);  // nop
+                tb.mem.write_word(0x10, 0x00000013);  // nop
+                tb.mem.write_word(0x14, 0x00000013);  // nop
+                tb.mem.write_word(0x18, 0x00000073);  // ecall
+                tb.mem.write_word(0x1C, 0x00400113);  // addi x2, x0, 4 (FAIL)
+                tb.mem.write_word(0x20, 0x800011B7);  // lui x3, 0x80001
+                tb.mem.write_word(0x24, 0x0021A023);  // sw x2, 0(x3)
+                tb.mem.write_word(0x28, 0x0000006F);  // jal x0, 0
 
                 // Trap handler at 0x100
-                tb.imem.write_word(0x100, 0x00100113);  // addi x2, x0, 1 (PASS)
-                tb.imem.write_word(0x104, 0x800011B7);  // lui x3, 0x80001
-                tb.imem.write_word(0x108, 0x0021A023);  // sw x2, 0(x3)
-                tb.imem.write_word(0x10C, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x100, 0x00100113);  // addi x2, x0, 1 (PASS)
+                tb.mem.write_word(0x104, 0x800011B7);  // lui x3, 0x80001
+                tb.mem.write_word(0x108, 0x0021A023);  // sw x2, 0(x3)
+                tb.mem.write_word(0x10C, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("trap_ebreak", [](IronCoreTestbench& tb) {
+            run_test("trap_ebreak", [](riscv64xO3Testbench& tb) {
                 // Test EBREAK trap: similar to ECALL
                 // Main code - with NOPs after CSR write
-                tb.imem.write_word(0x00, 0x000000B7);  // lui x1, 0
-                tb.imem.write_word(0x04, 0x10008093);  // addi x1, x1, 0x100
-                tb.imem.write_word(0x08, 0x30509073);  // csrw mtvec, x1
-                tb.imem.write_word(0x0C, 0x00000013);  // nop
-                tb.imem.write_word(0x10, 0x00000013);  // nop
-                tb.imem.write_word(0x14, 0x00000013);  // nop
-                tb.imem.write_word(0x18, 0x00100073);  // ebreak
-                tb.imem.write_word(0x1C, 0x00400113);  // addi x2, x0, 4 (FAIL)
-                tb.imem.write_word(0x20, 0x800011B7);  // lui x3, 0x80001
-                tb.imem.write_word(0x24, 0x0021A023);  // sw x2, 0(x3)
-                tb.imem.write_word(0x28, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x800000B7);  // lui x1, 0x80000 (mtvec base 0x80000000)
+                tb.mem.write_word(0x04, 0x10008093);  // addi x1, x1, 0x100
+                tb.mem.write_word(0x08, 0x30509073);  // csrw mtvec, x1
+                tb.mem.write_word(0x0C, 0x00000013);  // nop
+                tb.mem.write_word(0x10, 0x00000013);  // nop
+                tb.mem.write_word(0x14, 0x00000013);  // nop
+                tb.mem.write_word(0x18, 0x00100073);  // ebreak
+                tb.mem.write_word(0x1C, 0x00400113);  // addi x2, x0, 4 (FAIL)
+                tb.mem.write_word(0x20, 0x800011B7);  // lui x3, 0x80001
+                tb.mem.write_word(0x24, 0x0021A023);  // sw x2, 0(x3)
+                tb.mem.write_word(0x28, 0x0000006F);  // jal x0, 0
 
                 // Trap handler at 0x100
-                tb.imem.write_word(0x100, 0x00100113);  // addi x2, x0, 1 (PASS)
-                tb.imem.write_word(0x104, 0x800011B7);  // lui x3, 0x80001
-                tb.imem.write_word(0x108, 0x0021A023);  // sw x2, 0(x3)
-                tb.imem.write_word(0x10C, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x100, 0x00100113);  // addi x2, x0, 1 (PASS)
+                tb.mem.write_word(0x104, 0x800011B7);  // lui x3, 0x80001
+                tb.mem.write_word(0x108, 0x0021A023);  // sw x2, 0(x3)
+                tb.mem.write_word(0x10C, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("trap_illegal", [](IronCoreTestbench& tb) {
+            run_test("trap_illegal", [](riscv64xO3Testbench& tb) {
                 // Test illegal instruction trap
                 // Main code - with NOPs after CSR write
-                tb.imem.write_word(0x00, 0x000000B7);  // lui x1, 0
-                tb.imem.write_word(0x04, 0x10008093);  // addi x1, x1, 0x100
-                tb.imem.write_word(0x08, 0x30509073);  // csrw mtvec, x1
-                tb.imem.write_word(0x0C, 0x00000013);  // nop
-                tb.imem.write_word(0x10, 0x00000013);  // nop
-                tb.imem.write_word(0x14, 0x00000013);  // nop
-                tb.imem.write_word(0x18, 0x00000000);  // illegal instruction (all zeros)
-                tb.imem.write_word(0x1C, 0x00400113);  // addi x2, x0, 4 (FAIL)
-                tb.imem.write_word(0x20, 0x800011B7);  // lui x3, 0x80001
-                tb.imem.write_word(0x24, 0x0021A023);  // sw x2, 0(x3)
-                tb.imem.write_word(0x28, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x800000B7);  // lui x1, 0x80000 (mtvec base 0x80000000)
+                tb.mem.write_word(0x04, 0x10008093);  // addi x1, x1, 0x100
+                tb.mem.write_word(0x08, 0x30509073);  // csrw mtvec, x1
+                tb.mem.write_word(0x0C, 0x00000013);  // nop
+                tb.mem.write_word(0x10, 0x00000013);  // nop
+                tb.mem.write_word(0x14, 0x00000013);  // nop
+                tb.mem.write_word(0x18, 0x00000000);  // illegal instruction (all zeros)
+                tb.mem.write_word(0x1C, 0x00400113);  // addi x2, x0, 4 (FAIL)
+                tb.mem.write_word(0x20, 0x800011B7);  // lui x3, 0x80001
+                tb.mem.write_word(0x24, 0x0021A023);  // sw x2, 0(x3)
+                tb.mem.write_word(0x28, 0x0000006F);  // jal x0, 0
 
                 // Trap handler at 0x100
-                tb.imem.write_word(0x100, 0x00100113);  // addi x2, x0, 1 (PASS)
-                tb.imem.write_word(0x104, 0x800011B7);  // lui x3, 0x80001
-                tb.imem.write_word(0x108, 0x0021A023);  // sw x2, 0(x3)
-                tb.imem.write_word(0x10C, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x100, 0x00100113);  // addi x2, x0, 1 (PASS)
+                tb.mem.write_word(0x104, 0x800011B7);  // lui x3, 0x80001
+                tb.mem.write_word(0x108, 0x0021A023);  // sw x2, 0(x3)
+                tb.mem.write_word(0x10C, 0x0000006F);  // jal x0, 0
             });
 
 
-            run_test("trap_mret", [](IronCoreTestbench& tb) {
+            run_test("trap_mret", [](riscv64xO3Testbench& tb) {
                 // Test MRET jump: write mepc, execute mret, verify jump
-                // 0x00: addi x1, x0, 0x100      ; x1 = 0x100
-                // 0x04: csrw mepc, x1           ; mepc = 0x100
-                // 0x08: nop
+                // (offsets; code runs at 0x80000000 + offset)
+                // 0x00: lui x1, 0x80000          ; x1 = 0x80000000
+                // 0x04: addi x1, x1, 0x100       ; x1 = 0x80000100
+                // 0x08: csrw mepc, x1            ; mepc = 0x80000100
                 // 0x0C: nop
                 // 0x10: nop
-                // 0x14: mret                    ; jump to 0x100
-                // 0x18: addi x2, x0, 4          ; FAIL
-                // 0x1C: lui x3, 0x80001
-                // 0x20: sw x2, 0(x3)
-                // 0x24: jal x0, 0
+                // 0x14: nop
+                // 0x18: mret                     ; jump to 0x80000100
+                // 0x1C: addi x2, x0, 4           ; FAIL
+                // 0x20: lui x3, 0x80001
+                // 0x24: sw x2, 0(x3)
+                // 0x28: jal x0, 0
                 //
-                // 0x100: addi x2, x0, 1         ; PASS
+                // 0x100: addi x2, x0, 1          ; PASS
                 // 0x104: lui x3, 0x80001
                 // 0x108: sw x2, 0(x3)
                 // 0x10C: jal x0, 0
 
-                tb.imem.write_word(0x00, 0x10000093);  // addi x1, x0, 0x100
-                tb.imem.write_word(0x04, 0x34109073);  // csrw mepc, x1
-                tb.imem.write_word(0x08, 0x00000013);  // nop
-                tb.imem.write_word(0x0C, 0x00000013);  // nop
-                tb.imem.write_word(0x10, 0x00000013);  // nop
-                tb.imem.write_word(0x14, 0x30200073);  // mret
-                tb.imem.write_word(0x18, 0x00400113);  // addi x2, x0, 4 (FAIL)
-                tb.imem.write_word(0x1C, 0x800011B7);  // lui x3, 0x80001
-                tb.imem.write_word(0x20, 0x0021A023);  // sw x2, 0(x3)
-                tb.imem.write_word(0x24, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x800000B7);  // lui x1, 0x80000
+                tb.mem.write_word(0x04, 0x10008093);  // addi x1, x1, 0x100
+                tb.mem.write_word(0x08, 0x34109073);  // csrw mepc, x1
+                tb.mem.write_word(0x0C, 0x00000013);  // nop
+                tb.mem.write_word(0x10, 0x00000013);  // nop
+                tb.mem.write_word(0x14, 0x00000013);  // nop
+                tb.mem.write_word(0x18, 0x30200073);  // mret
+                tb.mem.write_word(0x1C, 0x00400113);  // addi x2, x0, 4 (FAIL)
+                tb.mem.write_word(0x20, 0x800011B7);  // lui x3, 0x80001
+                tb.mem.write_word(0x24, 0x0021A023);  // sw x2, 0(x3)
+                tb.mem.write_word(0x28, 0x0000006F);  // jal x0, 0
 
                 // Target at 0x100
-                tb.imem.write_word(0x100, 0x00100113); // addi x2, x0, 1 (PASS)
-                tb.imem.write_word(0x104, 0x800011B7); // lui x3, 0x80001
-                tb.imem.write_word(0x108, 0x0021A023); // sw x2, 0(x3)
-                tb.imem.write_word(0x10C, 0x0000006F); // jal x0, 0
+                tb.mem.write_word(0x100, 0x00100113); // addi x2, x0, 1 (PASS)
+                tb.mem.write_word(0x104, 0x800011B7); // lui x3, 0x80001
+                tb.mem.write_word(0x108, 0x0021A023); // sw x2, 0(x3)
+                tb.mem.write_word(0x10C, 0x0000006F); // jal x0, 0
             });
 
-            run_test("csr_bit_manip", [](IronCoreTestbench& tb) {
+            run_test("csr_bit_manip", [](riscv64xO3Testbench& tb) {
                 // Test CSRRS (set) and CSRRC (clear)
                 // 1. Write 0x0F to mscratch (using mepc as scratch again, 0x341)
                 // 2. CSRRS: set bit 4 (0x10) -> value should be 0x1F
                 // 3. CSRRC: clear bit 0 (0x01) -> value should be 0x1E
                 
                 // Init x1 = 0x0C (start value to align with 4)
-                tb.imem.write_word(0x00, 0x00C00093); // addi x1, x0, 12 (0xC)
-                tb.imem.write_word(0x04, 0x34109073); // csrw mepc, x1
+                tb.mem.write_word(0x00, 0x00C00093); // addi x1, x0, 12 (0xC)
+                tb.mem.write_word(0x04, 0x34109073); // csrw mepc, x1
                 
                 // CSRRS: Set bit 4 (0x10). x2 = 0x10
-                tb.imem.write_word(0x08, 0x01000113); // addi x2, x0, 16
-                tb.imem.write_word(0x0C, 0x341120F3); // csrrs x1, mepc, x2 (read old to x1, write new)
+                tb.mem.write_word(0x08, 0x01000113); // addi x2, x0, 16
+                tb.mem.write_word(0x0C, 0x341120F3); // csrrs x1, mepc, x2 (read old to x1, write new)
                 // x1 should be 0xC, mepc should be 0x1C
                 
                 // CSRRC: Clear bit 2 (0x4). x3 = 0x4
-                tb.imem.write_word(0x10, 0x00400193); // addi x3, x0, 4
-                tb.imem.write_word(0x14, 0x3411B273); // csrrc x4, mepc, x3 (read old to x4, clear bits)
+                tb.mem.write_word(0x10, 0x00400193); // addi x3, x0, 4
+                tb.mem.write_word(0x14, 0x3411B273); // csrrc x4, mepc, x3 (read old to x4, clear bits)
                 // x4 should be 0x1C, mepc should be 0x18
                 
                 // Verify result (mepc should be 0x18 = 24)
-                tb.imem.write_word(0x18, 0x341022F3); // csrr x5, mepc
-                tb.imem.write_word(0x1C, 0x01800313); // addi x6, x0, 24
-                tb.imem.write_word(0x20, 0x00628463); // beq x5, x6, +8
+                tb.mem.write_word(0x18, 0x341022F3); // csrr x5, mepc
+                tb.mem.write_word(0x1C, 0x01800313); // addi x6, x0, 24
+                tb.mem.write_word(0x20, 0x00628463); // beq x5, x6, +8
                 
                 // Fail
-                tb.imem.write_word(0x24, 0x00400213); // addi x4, x0, 4 (FAIL)
+                tb.mem.write_word(0x24, 0x00400213); // addi x4, x0, 4 (FAIL)
                 // Pass
-                tb.imem.write_word(0x28, 0x00100213); // addi x4, x0, 1 (PASS)
+                tb.mem.write_word(0x28, 0x00100213); // addi x4, x0, 1 (PASS)
                 
-                tb.imem.write_word(0x2C, 0x800012B7); // lui x5, 0x80001
-                tb.imem.write_word(0x30, 0x0042A023); // sw x4, 0(x5)
-                tb.imem.write_word(0x34, 0x0000006F); // jal x0, 0
+                tb.mem.write_word(0x2C, 0x800012B7); // lui x5, 0x80001
+                tb.mem.write_word(0x30, 0x0042A023); // sw x4, 0(x5)
+                tb.mem.write_word(0x34, 0x0000006F); // jal x0, 0
             });
             
-            run_test("csr_csrw_csrr", [](IronCoreTestbench& tb) {
+            run_test("csr_csrw_csrr", [](riscv64xO3Testbench& tb) {
                 // Test CSRW/CSRR: Write to mscratch (or use mepc), read back, verify
                 // Use mepc as a test register (it's writable)
                 // 0x00: addi x1, x0, 100      ; x1 = 100
@@ -794,19 +816,19 @@ int main(int argc, char** argv) {
                 // 0x1C: lui x5, 0x80001
                 // 0x20: sw x4, 0(x5)
                 // 0x24: jal x0, 0
-                tb.imem.write_word(0x00, 0x06400093);  // addi x1, x0, 100
-                tb.imem.write_word(0x04, 0x34109073);  // csrw mepc, x1
-                tb.imem.write_word(0x08, 0x34102173);  // csrr x2, mepc (csrrs x2, mepc, x0)
-                tb.imem.write_word(0x0C, 0x06400193);  // addi x3, x0, 100
-                tb.imem.write_word(0x10, 0x00310463);  // beq x2, x3, +8
-                tb.imem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
-                tb.imem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
-                tb.imem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
-                tb.imem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
-                tb.imem.write_word(0x24, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0x06400093);  // addi x1, x0, 100
+                tb.mem.write_word(0x04, 0x34109073);  // csrw mepc, x1
+                tb.mem.write_word(0x08, 0x34102173);  // csrr x2, mepc (csrrs x2, mepc, x0)
+                tb.mem.write_word(0x0C, 0x06400193);  // addi x3, x0, 100
+                tb.mem.write_word(0x10, 0x00310463);  // beq x2, x3, +8
+                tb.mem.write_word(0x14, 0x00400213);  // addi x4, x0, 4 (FAIL)
+                tb.mem.write_word(0x18, 0x00100213);  // addi x4, x0, 1 (PASS)
+                tb.mem.write_word(0x1C, 0x800012B7);  // lui x5, 0x80001
+                tb.mem.write_word(0x20, 0x0042A023);  // sw x4, 0(x5)
+                tb.mem.write_word(0x24, 0x0000006F);  // jal x0, 0
             });
 
-            run_test("csr_cycle", [](IronCoreTestbench& tb) {
+            run_test("csr_cycle", [](riscv64xO3Testbench& tb) {
                 // Test cycle counter: read cycle, wait, read again, ensure it increased
                 // 0x00: csrr x1, cycle        ; first read
                 // 0x04: nop
@@ -819,17 +841,17 @@ int main(int argc, char** argv) {
                 // 0x20: lui x4, 0x80001
                 // 0x24: sw x3, 0(x4)
                 // 0x28: jal x0, 0
-                tb.imem.write_word(0x00, 0xC00020F3);  // csrr x1, cycle (rdcycle x1)
-                tb.imem.write_word(0x04, 0x00000013);  // nop
-                tb.imem.write_word(0x08, 0x00000013);  // nop
-                tb.imem.write_word(0x0C, 0x00000013);  // nop
-                tb.imem.write_word(0x10, 0xC0002173);  // csrr x2, cycle
-                tb.imem.write_word(0x14, 0x0020C463);  // blt x1, x2, +8
-                tb.imem.write_word(0x18, 0x00400193);  // addi x3, x0, 4 (FAIL)
-                tb.imem.write_word(0x1C, 0x00100193);  // addi x3, x0, 1 (PASS)
-                tb.imem.write_word(0x20, 0x80001237);  // lui x4, 0x80001
-                tb.imem.write_word(0x24, 0x00322023);  // sw x3, 0(x4)
-                tb.imem.write_word(0x28, 0x0000006F);  // jal x0, 0
+                tb.mem.write_word(0x00, 0xC00020F3);  // csrr x1, cycle (rdcycle x1)
+                tb.mem.write_word(0x04, 0x00000013);  // nop
+                tb.mem.write_word(0x08, 0x00000013);  // nop
+                tb.mem.write_word(0x0C, 0x00000013);  // nop
+                tb.mem.write_word(0x10, 0xC0002173);  // csrr x2, cycle
+                tb.mem.write_word(0x14, 0x0020C463);  // blt x1, x2, +8
+                tb.mem.write_word(0x18, 0x00400193);  // addi x3, x0, 4 (FAIL)
+                tb.mem.write_word(0x1C, 0x00100193);  // addi x3, x0, 1 (PASS)
+                tb.mem.write_word(0x20, 0x80001237);  // lui x4, 0x80001
+                tb.mem.write_word(0x24, 0x00322023);  // sw x3, 0(x4)
+                tb.mem.write_word(0x28, 0x0000006F);  // jal x0, 0
             });
         }
 
@@ -842,7 +864,7 @@ int main(int argc, char** argv) {
     }
 
     // Load and run test file
-    IronCoreTestbench tb(enable_trace, imem_ws, dmem_ws);
+    riscv64xO3Testbench tb(enable_trace, imem_ws, dmem_ws, tohost_arg);
     tb.debug = debug;
     if (enable_trace) {
         if (trace_file.empty()) {
@@ -860,11 +882,8 @@ int main(int argc, char** argv) {
     }
 
     // Load test binary
-    // Load to both IMEM and DMEM (unified memory simulation) at 0x80000000
-    if (!tb.imem.load_binary(test_file, 0x80000000)) {
-        return 1;
-    }
-    if (!tb.dmem.load_binary(test_file, 0x80000000)) {
+    // Single unified memory image at 0x80000000
+    if (!tb.mem.load_binary(test_file, 0x80000000)) {
         return 1;
     }
     std::cout << "Loaded test binary to 0x80000000" << std::endl;

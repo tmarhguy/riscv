@@ -1,4 +1,4 @@
-# IronCore Test Macros
+# riscv64xO3 Test Macros
 # Common macros for assembly verification tests
 
 # Memory-mapped test interface

@@ -1,4 +1,4 @@
-# IronCore Load/Store Tests
+# riscv64xO3 Load/Store Tests
 # Verifies all memory access widths and alignments
 
 #include "test_macros.h"

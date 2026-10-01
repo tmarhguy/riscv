@@ -1,4 +1,4 @@
-# IronCore Forwarding Tests
+# riscv64xO3 Forwarding Tests
 # Verifies RAW hazard forwarding paths work correctly
 
 #include "test_macros.h"

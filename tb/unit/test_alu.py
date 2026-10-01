@@ -1,11 +1,11 @@
 """
-Unit tests for IronCore ALU
+Unit tests for riscv64xO3 ALU
 """
 
 import pytest
 
 
-# ALU operation encoding (matches ironcore_pkg.sv)
+# ALU operation encoding (matches rv64xo3_pkg.sv)
 class AluOp:
     ADD = 0b0000
     SUB = 0b0001

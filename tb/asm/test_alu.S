@@ -1,4 +1,4 @@
-# IronCore ALU Tests
+# riscv64xO3 ALU Tests
 # Verifies all ALU operations
 
 #include "test_macros.h"
@@ -105,7 +105,11 @@ test_8_pass:
 # Test 9: SRL (shift right logical)
 #-----------------------------------------------------------------------------
 test_9:
-    li      x1, 0x80000000
+    # NOTE: tb/asm builds as rv32, so plain `li x, 0x80000000` would LUI-load
+    # 0xFFFFFFFF80000000 after RV64 sign-extension. Build the zero-extended
+    # operand explicitly so the expectation below holds on RV64.
+    li      x1, 0x8000
+    slli    x1, x1, 16          # x1 = 0x0000000080000000
     li      x2, 16
     srl     x3, x1, x2          # 0x80000000 >> 16 = 0x8000
     li      x4, 0x8000
@@ -222,8 +226,9 @@ test_17_pass:
 #-----------------------------------------------------------------------------
 test_18:
     li      x1, 0x00000001
-    slli    x2, x1, 31
-    li      x3, 0x80000000
+    slli    x2, x1, 31          # x2 = 0x0000000080000000
+    li      x3, 0x8000
+    slli    x3, x3, 16          # x3 = 0x0000000080000000 (rv32-built `li 0x80000000` would sign-extend)
     beq     x2, x3, test_18_pass
     j       test_fail
 test_18_pass:
@@ -233,8 +238,9 @@ test_18_pass:
 # Test 19: SRLI
 #-----------------------------------------------------------------------------
 test_19:
-    li      x1, 0x80000000
-    srli    x2, x1, 31
+    li      x1, 0x8000
+    slli    x1, x1, 16          # x1 = 0x0000000080000000 (see test_9 note)
+    srli    x2, x1, 31          # 0x80000000 >> 31 = 1
     li      x3, 1
     beq     x2, x3, test_19_pass
     j       test_fail

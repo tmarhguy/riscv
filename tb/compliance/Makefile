@@ -1,9 +1,16 @@
 # RISC-V Compliance Test Runner
-# Runs riscv-tests suite against IronCore
+# Runs riscv-tests suite against riscv64xO3
 
-# Toolchain
-RISCV_PREFIX ?= riscv64-unknown-elf-
+# Toolchain (override with RISCV_PREFIX=riscv64-unknown-elf- etc.)
+ifeq ($(origin RISCV_PREFIX), undefined)
+  ifneq ($(shell command -v riscv64-unknown-elf-gcc 2>/dev/null),)
+    RISCV_PREFIX = riscv64-unknown-elf-
+  else
+    RISCV_PREFIX = riscv-none-elf-
+  endif
+endif
 OBJCOPY = $(RISCV_PREFIX)objcopy
+NM = $(RISCV_PREFIX)nm
 
 # Test Locations (try brew first, then local)
 BREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
@@ -19,7 +26,7 @@ else
 endif
 
 BUILD_DIR = build
-SIM = ../../build/obj_dir/ironcore_sim
+SIM = ../../build/obj_dir/rv64xo3_sim
 
 # Test suites
 RV32UI_TESTS = \
@@ -39,15 +46,19 @@ RV32UM_TESTS = \
 	mul mulh mulhsu mulhu \
 	div divu rem remu
 
-.PHONY: all run clean rv32ui rv32um
+.PHONY: all run clean rv32ui rv32um check-env
 
 all: run
+
+check-env:
+	@if [ ! -x $(SIM) ]; then echo "Simulator not found at $(SIM). Build it first:"; echo "  make sim   (from repo root)"; exit 1; fi
+	@if ! command -v $(OBJCOPY) >/dev/null 2>&1; then echo "RISC-V toolchain not found ($(OBJCOPY))."; echo "Install riscv64-unknown-elf-gcc, or use the dev container:"; echo "  make docker-shell"; exit 1; fi
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Run all tests
-run: rv32ui rv32um
+run: check-env rv32ui rv32um
 	@mkdir -p logs
 	@echo "=== Compliance Test Summary ==="
 	@echo "RV32UI: $$(grep PASS $(BUILD_DIR)/rv32ui-*.log | wc -l) passed"
@@ -61,7 +72,8 @@ rv32ui: $(BUILD_DIR)
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
 			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv32ui-p-$$test.bin; \
-			if $(SIM) $(BUILD_DIR)/rv32ui-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv32ui-p-$$test.log 2>&1; then \
+			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			if $(SIM) $(BUILD_DIR)/rv32ui-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv32ui-p-$$test.log 2>&1; then \
 				mv logs/coverage.dat logs/coverage_rv32ui-p-$$test.dat 2>/dev/null || true; \
 				echo "PASS"; \
 			else \
@@ -80,7 +92,8 @@ rv32um: $(BUILD_DIR)
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
 			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv32um-p-$$test.bin; \
-			if $(SIM) $(BUILD_DIR)/rv32um-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv32um-p-$$test.log 2>&1; then \
+			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			if $(SIM) $(BUILD_DIR)/rv32um-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv32um-p-$$test.log 2>&1; then \
 				mv logs/coverage.dat logs/coverage_rv32um-p-$$test.dat 2>/dev/null || true; \
 				echo "PASS"; \
 			else \

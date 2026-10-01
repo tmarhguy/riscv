@@ -1,4 +1,4 @@
-# IronCore Assembly Test Build
+# riscv64xO3 Assembly Test Build
 # Assembles verification tests
 
 # Toolchain

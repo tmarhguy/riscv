@@ -1,6 +1,6 @@
 # Verification Directory (tb)
 
-This directory contains the verification infrastructure for IronCore.
+This directory contains the verification infrastructure for riscv64xO3.
 
 ## Strategy
 

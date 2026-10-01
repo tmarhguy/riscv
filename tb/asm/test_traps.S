@@ -1,4 +1,4 @@
-# IronCore Trap Tests
+# riscv64xO3 Trap Tests
 # Verifies exception handling and CSR operations
 
 #include "test_macros.h"

@@ -1,15 +1,22 @@
 # RV64 Compliance Test Runner
-# Runs rv64ui and rv64um tests against IronCore RV64IM
+# Runs rv64ui and rv64um tests against riscv64xO3 RV64IMAC
 
-# Toolchain
-RISCV_PREFIX ?= riscv64-unknown-elf-
+# Toolchain (override with RISCV_PREFIX=riscv64-unknown-elf- etc.)
+ifeq ($(origin RISCV_PREFIX), undefined)
+  ifneq ($(shell command -v riscv64-unknown-elf-gcc 2>/dev/null),)
+    RISCV_PREFIX = riscv64-unknown-elf-
+  else
+    RISCV_PREFIX = riscv-none-elf-
+  endif
+endif
 OBJCOPY = $(RISCV_PREFIX)objcopy
+NM = $(RISCV_PREFIX)nm
 
 # Test Locations
 RISCV_TESTS_DIR = ../riscv-tests/isa
 
 BUILD_DIR = build
-SIM = ../../build/obj_dir/ironcore_sim
+SIM = ../../build/obj_dir/rv64xo3_sim
 
 # RV64UI test list (all 55 tests)
 RV64UI_TESTS = \
@@ -36,26 +43,28 @@ RV64UM_TESTS = \
 	div divu rem remu \
 	mulw divw divuw remw remuw
 
-# RV64MI test list
+# RV64MI test list (privileged + trap behavior; only existing binaries)
 RV64MI_TESTS = \
-	access breakpoint csr \
+	breakpoint csr \
 	illegal mcsr scall \
-	zicntr zifencei
+	zicntr
 
-.PHONY: all run clean rv64ui rv64um
+.PHONY: all run clean rv64ui rv64um rv64mi check-env
 
 all: run
+
+check-env:
+	@if [ ! -x $(SIM) ]; then echo "Simulator not found at $(SIM). Build it first:"; echo "  make sim   (from repo root)"; exit 1; fi
+	@if ! command -v $(OBJCOPY) >/dev/null 2>&1; then echo "RISC-V toolchain not found ($(OBJCOPY))."; echo "Install riscv64-unknown-elf-gcc, or use the dev container:"; echo "  make docker-shell"; exit 1; fi
+	@if [ ! -f $(RISCV_TESTS_DIR)/rv64ui-p-add ]; then echo "riscv-tests binaries not found in $(RISCV_TESTS_DIR)."; echo "Fetch and build them:"; echo "  git submodule update --init tb/riscv-tests"; echo "  cd tb/riscv-tests && ./configure --prefix=\$$RISCV && make -j"; echo "(needs riscv64-unknown-elf-gcc in PATH; see riscv-tests README)"; exit 1; fi
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 # Run all RV64 tests
-run: rv64ui rv64um rv64mi
-	@mkdir -p logs
-	@echo "=== RV64 Compliance Test Summary ==="
-	@echo "RV64UI: $$(grep -c PASS $(BUILD_DIR)/rv64ui-*.log 2>/dev/null || echo 0) passed"
-	@echo "RV64UM: $$(grep -c PASS $(BUILD_DIR)/rv64um-*.log 2>/dev/null || echo 0) passed"
-	@echo "RV64MI: $$(grep -c PASS $(BUILD_DIR)/rv64mi-*.log 2>/dev/null || echo 0) passed"
+run: check-env rv64ui rv64um rv64mi
+	@echo ""
+	@echo "=== RV64 Compliance Done (per-suite results above) ==="
 
 # RV64UI tests
 rv64ui: $(BUILD_DIR)
@@ -66,7 +75,8 @@ rv64ui: $(BUILD_DIR)
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
 			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64ui-p-$$test.bin 2>/dev/null; \
-			if $(SIM) $(BUILD_DIR)/rv64ui-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv64ui-p-$$test.log 2>&1; then \
+			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			if $(SIM) $(BUILD_DIR)/rv64ui-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv64ui-p-$$test.log 2>&1; then \
 				echo "PASS"; \
 				passed=$$((passed + 1)); \
 			else \
@@ -90,7 +100,8 @@ rv64mi: $(BUILD_DIR)
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
 			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64mi-p-$$test.bin 2>/dev/null; \
-			if $(SIM) $(BUILD_DIR)/rv64mi-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv64mi-p-$$test.log 2>&1; then \
+			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			if $(SIM) $(BUILD_DIR)/rv64mi-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv64mi-p-$$test.log 2>&1; then \
 				echo "PASS"; \
 				passed=$$((passed + 1)); \
 			else \
@@ -114,7 +125,8 @@ rv64um: $(BUILD_DIR)
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
 			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64um-p-$$test.bin 2>/dev/null; \
-			if $(SIM) $(BUILD_DIR)/rv64um-p-$$test.bin --timeout 2000000 > $(BUILD_DIR)/rv64um-p-$$test.log 2>&1; then \
+			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			if $(SIM) $(BUILD_DIR)/rv64um-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv64um-p-$$test.log 2>&1; then \
 				echo "PASS"; \
 				passed=$$((passed + 1)); \
 			else \

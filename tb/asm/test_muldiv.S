@@ -1,4 +1,4 @@
-# IronCore MulDiv Tests
+# riscv64xO3 MulDiv Tests
 # Verifies M extension operations
 
 #include "test_macros.h"
@@ -198,10 +198,12 @@ test_17:
 # RISC-V spec: overflow result = -2^31
 #-----------------------------------------------------------------------------
 test_18:
-    li      x1, 0x80000000      # -2^31
+    li      x1, 0x80000000      # -2^31 (low 32 bits)
     li      x2, -1
-    div     x3, x1, x2          # Overflow case
-    li      x4, 0x80000000      # Result is -2^31
+    div     x3, x1, x2          # 64-bit DIV does NOT overflow here:
+                                # -2147483648 / -1 = +2147483648
+    li      x4, 0x8000
+    slli    x4, x4, 16          # x4 = 0x0000000080000000
     beq     x3, x4, test_18_pass
     j       test_fail
 test_18_pass:

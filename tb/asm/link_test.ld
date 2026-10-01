@@ -1,12 +1,12 @@
-/* IronCore Test Linker Script */
+/* riscv64xO3 Test Linker Script */
 
 OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
 MEMORY
 {
-    ROM (rx)  : ORIGIN = 0x00000000, LENGTH = 16K
-    RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 16K
+    ROM (rx)  : ORIGIN = 0x80000000, LENGTH = 16K
+    RAM (rwx) : ORIGIN = 0x80010000, LENGTH = 16K
 }
 
 _stack_top = ORIGIN(RAM) + LENGTH(RAM);

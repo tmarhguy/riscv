@@ -1,4 +1,4 @@
-# IronCore Stall Tests
+# riscv64xO3 Stall Tests
 # Verifies load-use stalls and pipeline control
 
 #include "test_macros.h"

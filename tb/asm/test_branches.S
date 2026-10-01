@@ -1,4 +1,4 @@
-# IronCore Branch Tests
+# riscv64xO3 Branch Tests
 # Verifies all branch types and prediction behavior
 
 #include "test_macros.h"

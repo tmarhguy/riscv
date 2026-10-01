@@ -1,4 +1,4 @@
-# IronCore Jump Tests
+# riscv64xO3 Jump Tests
 # Verifies JAL and JALR instructions
 
 #include "test_macros.h"

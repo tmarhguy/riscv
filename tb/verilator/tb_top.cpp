@@ -1,9 +1,9 @@
-// IronCore Verilator Testbench
+// riscv64xO3 Verilator Testbench
 // Simple C++ testbench for command-line simulation
 
 #include <verilated.h>
 #include <verilated_fst_c.h>
-#include "Vironcore_top.h"
+#include "Vrv64xo3_top.h"
 
 #include <memory>
 #include <iostream>
@@ -50,13 +50,13 @@ int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
 
     // Create DUT
-    auto dut = std::make_unique<Vironcore_top>();
+    auto dut = std::make_unique<Vrv64xo3_top>();
 
     // Create trace
     Verilated::traceEverOn(true);
     auto trace = std::make_unique<VerilatedFstC>();
     dut->trace(trace.get(), 99);
-    trace->open("waves/ironcore.fst");
+    trace->open("waves/rv64xo3.fst");
 
     // Create memories
     Memory imem(64 * 1024);  // 64KB instruction memory
