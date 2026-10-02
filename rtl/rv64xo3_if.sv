@@ -93,7 +93,7 @@ module rv64xo3_if #(
         // back-to-back acks otherwise stream without gaps.
         if (pc_redirect_i || flush_i)
           state_next = IDLE;
-        else if (iwb_ack_i && !pair_buf_valid && (steer || stall_i))
+        else if (steer || (iwb_ack_i && !pair_buf_valid && stall_i))
           state_next = IDLE;
       end
       default: state_next = IDLE;
