@@ -1,94 +1,126 @@
-// riscv64xO3 Hazard Detection and Forwarding Unit
-// Detects data hazards and generates forwarding/stall signals
+// riscv64xO3 Hazard Detection and Forwarding Unit (2-wide)
+// Detects data hazards and generates forwarding/stall signals for an
+// instruction pair. Producer priority is youngest-first within and across
+// stages: EX-B > EX-A > MEM-B > MEM-A > WB-B > WB-A.
 
 import rv64xo3_pkg::*;
 module rv64xo3_hazard (
-    // ID stage register addresses (from instruction in ID/EX)
-    input logic [REG_ADDR_W-1:0] id_rs1_addr_i,
-    input logic [REG_ADDR_W-1:0] id_rs2_addr_i,
-    input logic                  id_valid_i,
+    // ID stage register addresses (IF/ID pair)
+    input logic [REG_ADDR_W-1:0] id_a_rs1_addr_i,
+    input logic [REG_ADDR_W-1:0] id_a_rs2_addr_i,
+    input logic                  id_a_valid_i,
+    input logic [REG_ADDR_W-1:0] id_b_rs1_addr_i,
+    input logic [REG_ADDR_W-1:0] id_b_rs2_addr_i,
+    input logic                  id_b_valid_i,
 
-    // EX stage info (from ID/EX register)
-    input logic [REG_ADDR_W-1:0] ex_rd_addr_i,
-    input logic                  ex_mem_read_i,
-    input logic                  ex_valid_i,
-    input logic [REG_ADDR_W-1:0] ex_rs1_addr_i, // Added for forwarding
-    input logic [REG_ADDR_W-1:0] ex_rs2_addr_i, // Added for forwarding
+    // EX stage info (ID/EX pair)
+    input logic [REG_ADDR_W-1:0] ex_a_rd_addr_i,
+    input logic                  ex_a_mem_read_i,
+    input logic                  ex_a_valid_i,
+    input logic [REG_ADDR_W-1:0] ex_b_rd_addr_i,
+    input logic                  ex_b_mem_read_i,
+    input logic                  ex_b_valid_i,
+    input logic [REG_ADDR_W-1:0] ex_a_rs1_addr_i,
+    input logic [REG_ADDR_W-1:0] ex_a_rs2_addr_i,
+    input logic [REG_ADDR_W-1:0] ex_b_rs1_addr_i,
+    input logic [REG_ADDR_W-1:0] ex_b_rs2_addr_i,
 
-    // MEM stage info (from EX/MEM register)
-    input logic [REG_ADDR_W-1:0] mem_rd_addr_i,
-    input logic                  mem_reg_write_i,
-    input logic                  mem_valid_i,
+    // MEM stage info (EX/MEM pair)
+    input logic [REG_ADDR_W-1:0] mem_a_rd_addr_i,
+    input logic                  mem_a_reg_write_i,
+    input logic                  mem_a_valid_i,
+    input logic [REG_ADDR_W-1:0] mem_b_rd_addr_i,
+    input logic                  mem_b_reg_write_i,
+    input logic                  mem_b_valid_i,
 
-    // WB stage info (from MEM/WB register)
-    input logic [REG_ADDR_W-1:0] wb_rd_addr_i,
-    input logic                  wb_reg_write_i,
-    input logic                  wb_valid_i,
+    // WB stage info (MEM/WB pair)
+    input logic [REG_ADDR_W-1:0] wb_a_rd_addr_i,
+    input logic                  wb_a_reg_write_i,
+    input logic                  wb_a_valid_i,
+    input logic [REG_ADDR_W-1:0] wb_b_rd_addr_i,
+    input logic                  wb_b_reg_write_i,
+    input logic                  wb_b_valid_i,
 
     // Hazard outputs
     output logic load_use_hazard_o,
 
-    // Forwarding outputs (for EX stage operands)
-    output rv64xo3_pkg::fwd_sel_e fwd_a_sel_o,
-    output rv64xo3_pkg::fwd_sel_e fwd_b_sel_o
+    // Forwarding outputs (per consumer slot)
+    output rv64xo3_pkg::fwd_sel_e fwd_a_sel_a_o,
+    output rv64xo3_pkg::fwd_sel_e fwd_b_sel_a_o,
+    output rv64xo3_pkg::fwd_sel_e fwd_a_sel_b_o,
+    output rv64xo3_pkg::fwd_sel_e fwd_b_sel_b_o
 );
 
   //--------------------------------------------------------------------------
   // Load-Use Hazard Detection
   //--------------------------------------------------------------------------
-  // Stall if EX stage has a load and ID stage needs the result
-  // This compares ID stage source regs with EX stage destination
-  assign load_use_hazard_o = id_valid_i && ex_valid_i && ex_mem_read_i &&
-                              (ex_rd_addr_i != 5'd0) &&
-                              ((ex_rd_addr_i == id_rs1_addr_i) ||
-                               (ex_rd_addr_i == id_rs2_addr_i));
+  // Stall if either EX slot holds a load whose destination is needed by
+  // either ID slot. Pair-internal load-use (slot-A load, slot-B user in
+  // the same ID pair) is handled by dispatch serialize, which issues the
+  // load alone so this single-stage check takes over next cycle.
+  logic ex_a_load_hit;
+  logic ex_b_load_hit;
+
+  assign ex_a_load_hit = ex_a_valid_i && ex_a_mem_read_i &&
+                         (ex_a_rd_addr_i != 5'd0) &&
+                         ((id_a_valid_i &&
+                           ((ex_a_rd_addr_i == id_a_rs1_addr_i) ||
+                            (ex_a_rd_addr_i == id_a_rs2_addr_i))) ||
+                          (id_b_valid_i &&
+                           ((ex_a_rd_addr_i == id_b_rs1_addr_i) ||
+                            (ex_a_rd_addr_i == id_b_rs2_addr_i))));
+
+  assign ex_b_load_hit = ex_b_valid_i && ex_b_mem_read_i &&
+                         (ex_b_rd_addr_i != 5'd0) &&
+                         ((id_a_valid_i &&
+                           ((ex_b_rd_addr_i == id_a_rs1_addr_i) ||
+                            (ex_b_rd_addr_i == id_a_rs2_addr_i))) ||
+                          (id_b_valid_i &&
+                           ((ex_b_rd_addr_i == id_b_rs1_addr_i) ||
+                            (ex_b_rd_addr_i == id_b_rs2_addr_i))));
+
+  assign load_use_hazard_o = ex_a_load_hit || ex_b_load_hit;
 
   //--------------------------------------------------------------------------
-  // Forwarding Logic
+  // Forwarding Logic (youngest producer wins)
   //--------------------------------------------------------------------------
-  // These signals determine forwarding for the instruction currently in EX stage.
-  // The rs1/rs2 addresses passed in are from the ID/EX register (i.e., the
-  // instruction in EX stage). We compare against MEM (EX/MEM reg) and WB
-  // (MEM/WB reg) to forward results.
-
-  // Note: The caller passes id_ex_reg.rs1_addr and id_ex_reg.rs2_addr to this
-  // module as the "id_rs1_addr_i" and "id_rs2_addr_i" inputs for forwarding
-  // decisions, and the IF/ID instruction's rs1/rs2 for load-use hazard detection.
-
-  // For RS1 (operand A) forwarding
-  always_comb begin
-    fwd_a_sel_o = FWD_NONE;
-
-    // Forward from MEM stage (EX/MEM register has result from previous instruction)
-    if (mem_valid_i && mem_reg_write_i &&
-        (mem_rd_addr_i != 5'd0) &&
-        (mem_rd_addr_i == ex_rs1_addr_i)) begin
-      fwd_a_sel_o = FWD_EX_MEM;
-    end  // Forward from WB stage (MEM/WB register has result from 2 instructions ago)
-    else if (wb_valid_i && wb_reg_write_i &&
-             (wb_rd_addr_i != 5'd0) &&
-             (wb_rd_addr_i == ex_rs1_addr_i)) begin
-      fwd_a_sel_o = FWD_MEM_WB;
+  // Resolves one consumer register against the older pipeline stages.
+  // Only MEM (EX/MEM) and WB (MEM/WB) are producers: an instruction in EX
+  // can never source a same-stage consumer (same instruction or younger),
+  // so EX rd fields (garbage for stores/branches) must not match here.
+  // Priority is youngest-first: MEM-B > MEM-A > WB-B > WB-A. Tags match
+  // the EX data muxes (FWD_EX_MEM selects EX/MEM data).
+  // NOTE: a load sitting in MEM has not read the bus yet, so its result
+  // field holds the address, not data. The pipeline timing (load-use
+  // bubble) guarantees a consumer never samples a MEM load in the same
+  // cycle it reads the bus; it always sees it one cycle later in WB.
+  function automatic rv64xo3_pkg::fwd_sel_e fwd_sel(
+    input logic [REG_ADDR_W-1:0] rs_addr,
+    input logic                  rs_valid
+  );
+    if (!rs_valid || rs_addr == 5'd0) begin
+      return FWD_NONE;
     end
-  end
-
-  //--------------------------------------------------------------------------
-  // Forwarding Logic for RS2 (operand B)
-  //--------------------------------------------------------------------------
-  always_comb begin
-    fwd_b_sel_o = FWD_NONE;
-
-    // Forward from MEM stage
-    if (mem_valid_i && mem_reg_write_i &&
-        (mem_rd_addr_i != 5'd0) &&
-        (mem_rd_addr_i == ex_rs2_addr_i)) begin
-      fwd_b_sel_o = FWD_EX_MEM;
-    end  // Forward from WB stage
-    else if (wb_valid_i && wb_reg_write_i &&
-             (wb_rd_addr_i != 5'd0) &&
-             (wb_rd_addr_i == ex_rs2_addr_i)) begin
-      fwd_b_sel_o = FWD_MEM_WB;
+    // MEM stage, younger slot first
+    if (mem_b_valid_i && mem_b_reg_write_i && (mem_b_rd_addr_i == rs_addr)) begin
+      return FWD_EX_B;
     end
-  end
+    if (mem_a_valid_i && mem_a_reg_write_i && (mem_a_rd_addr_i == rs_addr)) begin
+      return FWD_EX_A;
+    end
+    // WB stage, younger slot first
+    if (wb_b_valid_i && wb_b_reg_write_i && (wb_b_rd_addr_i == rs_addr)) begin
+      return FWD_WB_B;
+    end
+    if (wb_a_valid_i && wb_a_reg_write_i && (wb_a_rd_addr_i == rs_addr)) begin
+      return FWD_WB_A;
+    end
+    return FWD_NONE;
+  endfunction
+
+  assign fwd_a_sel_a_o = fwd_sel(ex_a_rs1_addr_i, ex_a_valid_i);
+  assign fwd_b_sel_a_o = fwd_sel(ex_a_rs2_addr_i, ex_a_valid_i);
+  assign fwd_a_sel_b_o = fwd_sel(ex_b_rs1_addr_i, ex_b_valid_i);
+  assign fwd_b_sel_b_o = fwd_sel(ex_b_rs2_addr_i, ex_b_valid_i);
 
 endmodule : rv64xo3_hazard
