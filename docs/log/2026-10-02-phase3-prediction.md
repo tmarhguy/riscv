@@ -25,3 +25,27 @@ The dual-issue tree remains 19 cycles (<32).
 Also repaired literal escaped redirection/operators in the lint recipes,
 which could previously hide lint failures. Logs: build/phase3-regress.log,
 build/phase3-bp.log, build/phase3-recovery.log (ignored artifacts).
+
+## CI portability follow-up
+
+The first post-Phase-3 CI run exposed tool compatibility issues hidden by
+local-only checks. Verilator rejects nonblocking reset-loop writes to the
+predictor tables, so table initialization now uses initial values while the
+history and RAS pointer retain reset behavior. Yosys 0.33 also rejects
+unpacked array ports, struct member selection on a function result, return
+statements, and an unbased literal in the register-file read function. The
+predictor and rename interfaces are now packed, prediction outputs use a
+packed function result, and helper functions use portable result
+assignments.
+
+Separating `ctrl.stall_if` from the other control bundle assignments removed
+Verilator's `serialize_pair` combinational-loop warning. The Yosys
+structural synthesis smoke runs with `-noabc`; this avoids spending minutes
+mapping the combinational 64-bit multiplier while still checking RTL
+parsing, hierarchy, process lowering, memory handling, and technology
+mapping. RTL simulation regression remains the functional check.
+
+Follow-up evidence: Verilator lint passed; Yosys 0.69 structural synthesis
+passed; branch-predictor cocotb passed; `make regress` passed unit 58/58,
+cocotb runners 8/8, C++ 15/15, RV64 82/82, and RV32 45/45. Verible was
+unavailable locally and skipped.
