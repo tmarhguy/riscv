@@ -49,3 +49,26 @@ Follow-up evidence: Verilator lint passed; Yosys 0.69 structural synthesis
 passed; branch-predictor cocotb passed; `make regress` passed unit 58/58,
 cocotb runners 8/8, C++ 15/15, RV64 82/82, and RV32 45/45. Verible was
 unavailable locally and skipped.
+
+## Verified GitHub CI repair
+
+The earlier portability follow-up was verified locally, but did not fix the
+Ubuntu jobs. On 2026-10-01 local time, the remaining failures were resolved:
+
+* `serialize_pair` now reads an independent scalar decode-stall condition,
+  avoiding the older Verilator's packed-control dependency cycle.
+* Predictor and rename ports use flat vectors, with predictor tests updated
+  to access packed slots explicitly.
+* Failed synthesis prints the final 80 log lines. This exposed Yosys 0.33's
+  rejection of package imports at the first ALU source, before those ports.
+  CI now pins OSS CAD Suite 2026-10-01 (Yosys 0.69+173).
+* Replaced an invalid setup-python revision with the verified v5 revision.
+  Cocotb 2 requires VPI methods absent in Ubuntu Verilator 5.020, so the
+  simulation job also uses the pinned suite. Lint still exercises 5.020.
+
+Local `make regress` passed: unit 58, cocotb runners 8, C++ 15,
+RV64UI 54, RV64UM 13, RV64MI 15, RV32UI 37, RV32UM 8; no failures.
+Local synthesis passed. GitHub synthesis run 36957282399 passed with the
+pinned suite; the old-Verilator lint job also passed. Verible remains
+unavailable and is explicitly skipped. Logs: build/ci-fix-regress.log and
+build/ci-fix-synth.log.
