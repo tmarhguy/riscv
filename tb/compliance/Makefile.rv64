@@ -18,7 +18,7 @@ RISCV_TESTS_DIR = ../riscv-tests/isa
 BUILD_DIR = build
 SIM = ../../build/obj_dir/rv64xo3_sim
 
-# RV64UI test list (all 55 tests)
+# RV64UI test list (54 tests)
 RV64UI_TESTS = \
 	add addi addiw addw \
 	and andi auipc \
@@ -79,8 +79,9 @@ rv64ui: $(BUILD_DIR)
 		TEST_SRC=$(RISCV_TESTS_DIR)/rv64ui-p-$$test; \
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
-			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64ui-p-$$test.bin 2>/dev/null; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64ui-p-$$test.bin 2>/dev/null || exit 1; \
 			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			test -n "$$TOHOST" || exit 1; \
 			if $(SIM) $(BUILD_DIR)/rv64ui-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv64ui-p-$$test.log 2>&1; then \
 				echo "PASS"; \
 				passed=$$((passed + 1)); \
@@ -94,7 +95,8 @@ rv64ui: $(BUILD_DIR)
 		fi; \
 	done; \
 	echo ""; \
-	echo "RV64UI Results: $$passed passed, $$failed failed, $$skipped skipped"
+	echo "RV64UI Results: $$passed passed, $$failed failed, $$skipped skipped"; \
+	test $$failed -eq 0 && test $$skipped -eq 0
 
 # RV64MI tests
 rv64mi: $(BUILD_DIR)
@@ -104,8 +106,9 @@ rv64mi: $(BUILD_DIR)
 		TEST_SRC=$(RISCV_TESTS_DIR)/rv64mi-p-$$test; \
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
-			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64mi-p-$$test.bin 2>/dev/null; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64mi-p-$$test.bin 2>/dev/null || exit 1; \
 			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			test -n "$$TOHOST" || exit 1; \
 			if $(SIM) $(BUILD_DIR)/rv64mi-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv64mi-p-$$test.log 2>&1; then \
 				echo "PASS"; \
 				passed=$$((passed + 1)); \
@@ -119,7 +122,8 @@ rv64mi: $(BUILD_DIR)
 		fi; \
 	done; \
 	echo ""; \
-	echo "RV64MI Results: $$passed passed, $$failed failed, $$skipped skipped"
+	echo "RV64MI Results: $$passed passed, $$failed failed, $$skipped skipped"; \
+	test $$failed -eq 0 && test $$skipped -eq 0
 
 # RV64UM tests
 rv64um: $(BUILD_DIR)
@@ -129,8 +133,9 @@ rv64um: $(BUILD_DIR)
 		TEST_SRC=$(RISCV_TESTS_DIR)/rv64um-p-$$test; \
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
-			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64um-p-$$test.bin 2>/dev/null; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv64um-p-$$test.bin 2>/dev/null || exit 1; \
 			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			test -n "$$TOHOST" || exit 1; \
 			if $(SIM) $(BUILD_DIR)/rv64um-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv64um-p-$$test.log 2>&1; then \
 				echo "PASS"; \
 				passed=$$((passed + 1)); \
@@ -144,7 +149,8 @@ rv64um: $(BUILD_DIR)
 		fi; \
 	done; \
 	echo ""; \
-	echo "RV64UM Results: $$passed passed, $$failed failed, $$skipped skipped"
+	echo "RV64UM Results: $$passed passed, $$failed failed, $$skipped skipped"; \
+	test $$failed -eq 0 && test $$skipped -eq 0
 
 clean:
 	rm -rf $(BUILD_DIR)
