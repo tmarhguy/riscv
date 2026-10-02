@@ -258,6 +258,7 @@ package rv64xo3_pkg;
     logic [XLEN-1:0] pc;
     logic [ILEN-1:0] instr;
     logic            valid;
+    logic [7:0]      pred_index;
     logic            pred_taken;   // Branch prediction
     logic [XLEN-1:0] pred_target;
   } if_id_reg_t;
@@ -293,6 +294,7 @@ package rv64xo3_pkg;
     logic                  is_auipc;
     logic                  illegal_instr;
     logic                  valid;
+    logic [7:0]            pred_index;
     logic                  pred_taken;
     logic [XLEN-1:0]       pred_target;
   } id_ex_reg_t;
