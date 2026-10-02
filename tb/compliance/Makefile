@@ -67,42 +67,46 @@ run: check-env rv32ui rv32um
 # RV32UI tests
 rv32ui: $(BUILD_DIR)
 	@echo "Running RV32UI tests from $(RISCV_TESTS_DIR)..."
-	@for test in $(RV32UI_TESTS); do \
+	@failed=0; skipped=0; for test in $(RV32UI_TESTS); do \
 		TEST_SRC=$(RISCV_TESTS_DIR)/rv32ui-p-$$test; \
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
-			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv32ui-p-$$test.bin; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv32ui-p-$$test.bin || exit 1; \
 			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			test -n "$$TOHOST" || exit 1; \
 			if $(SIM) $(BUILD_DIR)/rv32ui-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv32ui-p-$$test.log 2>&1; then \
 				mv logs/coverage.dat logs/coverage_rv32ui-p-$$test.dat 2>/dev/null || true; \
 				echo "PASS"; \
 			else \
-				echo "FAIL"; \
+				echo "FAIL"; failed=$$((failed + 1)); \
 			fi; \
 		else \
-			echo "SKIP (not found: $$TEST_SRC)"; \
+			echo "SKIP (not found: $$TEST_SRC)"; skipped=$$((skipped + 1)); \
 		fi; \
-	done
+	done; \
+	test $$failed -eq 0 && test $$skipped -eq 0
 
 # RV32UM tests
 rv32um: $(BUILD_DIR)
 	@echo "Running RV32UM tests from $(RISCV_TESTS_DIR)..."
-	@for test in $(RV32UM_TESTS); do \
+	@failed=0; skipped=0; for test in $(RV32UM_TESTS); do \
 		TEST_SRC=$(RISCV_TESTS_DIR)/rv32um-p-$$test; \
 		if [ -f $$TEST_SRC ]; then \
 			echo -n "  $$test: "; \
-			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv32um-p-$$test.bin; \
+			$(OBJCOPY) -O binary $$TEST_SRC $(BUILD_DIR)/rv32um-p-$$test.bin || exit 1; \
 			TOHOST=$$( $(NM) $$TEST_SRC 2>/dev/null | awk '$$3 == "tohost" { print "0x" $$1 }' ); \
+			test -n "$$TOHOST" || exit 1; \
 			if $(SIM) $(BUILD_DIR)/rv32um-p-$$test.bin --timeout 2000000 --tohost $$TOHOST > $(BUILD_DIR)/rv32um-p-$$test.log 2>&1; then \
 				mv logs/coverage.dat logs/coverage_rv32um-p-$$test.dat 2>/dev/null || true; \
 				echo "PASS"; \
 			else \
-				echo "FAIL"; \
+				echo "FAIL"; failed=$$((failed + 1)); \
 			fi; \
 		else \
-			echo "SKIP (not found: $$TEST_SRC)"; \
+			echo "SKIP (not found: $$TEST_SRC)"; skipped=$$((skipped + 1)); \
 		fi; \
-	done
+	done; \
+	test $$failed -eq 0 && test $$skipped -eq 0
 
 clean:
 	rm -rf $(BUILD_DIR)
