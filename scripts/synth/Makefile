@@ -49,7 +49,7 @@ yosys-synth: $(BUILD_DIR)
 		synth -noabc; \
 		write_json $(BUILD_DIR)/$(DESIGN).json; \
 		stat" \
-		> $(BUILD_DIR)/yosys.log 2>&1
+		> $(BUILD_DIR)/yosys.log 2>&1 || { tail -n 80 $(BUILD_DIR)/yosys.log; exit 1; }
 
 # Generate reports
 report: $(BUILD_DIR)/$(DESIGN).json
