@@ -11,6 +11,7 @@ SRCS = \
 	$(RTL_DIR)/rv64xo3_alu.sv \
 	$(RTL_DIR)/rv64xo3_muldiv.sv \
 	$(RTL_DIR)/rv64xo3_decoder.sv \
+	$(RTL_DIR)/rv64xo3_rvc.sv \
 	$(RTL_DIR)/rv64xo3_if.sv \
 	$(RTL_DIR)/rv64xo3_id.sv \
 	$(RTL_DIR)/rv64xo3_ex.sv \

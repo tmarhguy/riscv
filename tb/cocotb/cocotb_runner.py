@@ -44,6 +44,7 @@ FULL_RTL = [
 # name -> (rtl sources, toplevel, test dirs holding the test modules,
 #           test modules, optional testcase filter)
 CONFIGS = {
+    "rvc": (["rv64xo3_rvc.sv"], "rv64xo3_rvc", [TB / "rvc"], ["test_rvc"], []),
     "bp": (
         ["include/rv64xo3_pkg.sv", "rv64xo3_bp.sv"],
         "rv64xo3_bp", [TB / "bp"], ["test_bp"], [],
@@ -187,3 +188,8 @@ def test_top():
 
 def test_bp():
     _run("bp")
+
+
+@pytest.mark.smoke
+def test_rvc():
+    _run("rvc")

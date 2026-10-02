@@ -25,6 +25,7 @@ RTL_SRCS := \
 	$(RTL_DIR)/rv64xo3_alu.sv \
 	$(RTL_DIR)/rv64xo3_muldiv.sv \
 	$(RTL_DIR)/rv64xo3_decoder.sv \
+	$(RTL_DIR)/rv64xo3_rvc.sv \
 	$(RTL_DIR)/rv64xo3_if.sv \
 	$(RTL_DIR)/rv64xo3_id.sv \
 	$(RTL_DIR)/rv64xo3_ex.sv \
@@ -147,6 +148,7 @@ lint-verilator:
 	@echo "[LINT] Running Verilator lint..."
 	@if command -v $(VERILATOR) >/dev/null 2>&1; then \
 		$(VERILATOR) $(VERILATOR_LINT_FLAGS) $(RTL_SRCS) || (echo "[LINT] Verilator lint failed" && exit 1); \
+		$(VERILATOR) --lint-only -Wall --top-module rv64xo3_rvc $(RTL_DIR)/rv64xo3_rvc.sv || exit 1; \
 	else \
 		echo "[LINT] ERROR: Verilator not found. Install with:"; \
 		echo "  brew install verilator"; \
