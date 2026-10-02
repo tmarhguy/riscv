@@ -450,3 +450,48 @@ async def test_dual_issue(dut):
     dut._log.info(f"31-ALU add tree completed in {done_at} cycles")
     # 33 insns single-issue needs 33+fill; 2-wide must beat 32.
     assert done_at < 32, f"no dual issue? took {done_at} cycles"
+
+
+def enc_b(imm, rs2, rs1, f3):
+    return (((imm >> 12) & 1) << 31 | ((imm >> 5) & 0x3f) << 25 |
+            rs2 << 20 | rs1 << 15 | f3 << 12 |
+            ((imm >> 1) & 0xf) << 8 | ((imm >> 11) & 1) << 7 | 0x63)
+
+
+def enc_j(imm, rd=0):
+    return (((imm >> 20) & 1) << 31 | ((imm >> 1) & 0x3ff) << 21 |
+            ((imm >> 11) & 1) << 20 | ((imm >> 12) & 0xff) << 12 |
+            rd << 7 | 0x6f)
+
+
+@cocotb.test()
+async def test_prediction_recovery(dut):
+    """Slot-B loop exit, slot-A wrong-path store, and nested x1/x5 calls."""
+    cocotb.start_soon(Clock(dut.clk_i, 10, unit="ns").start())
+    prog = {
+        0x00: enc_i(0x100, 0, 0, 20),
+        0x04: enc_i(20, 0, 0, 10),
+        0x08: enc_i(0, 0, 0, 11),
+        0x0c: enc_j(0x14, 1),             # slot B call -> 0x20
+        0x10: enc_b(8, 0, 0, 0),         # always taken: discard bad store
+        0x14: enc_s(0, 10, 20, 2),
+        0x18: enc_s(0, 11, 20, 2),       # completion: count 20
+        0x1c: enc_j(0),
+        0x20: enc_i(1, 11, 0, 11),
+        0x24: enc_j(0x1c, 5),            # nested x5 call -> 0x40
+        0x28: enc_i(-1, 10, 0, 10),
+        0x2c: enc_b(-12, 0, 10, 1),      # slot B bne, trained taken then exits
+        0x30: enc_i(0, 1, 0, 0, 0x67),   # x1 return -> 0x10
+        0x34: enc_s(0, 10, 20, 2),       # wrong path
+        0x40: enc_i(0, 5, 0, 0, 0x67),   # x5 return -> 0x28
+        0x44: enc_s(0, 10, 20, 2),       # wrong path
+    }
+    imem = WishboneMemory(dut, "iwb", init_data=prog)
+    dmem = WishboneMemory(dut, "dwb")
+    cocotb.start_soon(imem.run())
+    cocotb.start_soon(dmem.run())
+    await reset_dut(dut)
+    done = await run_until_store(dut, dmem, 20, limit=1000)
+    assert done is not None, "prediction recovery/call links corrupted control flow"
+    await ClockCycles(dut.clk_i, 15)
+    assert dmem._read_word(TOHOST_OFF) == 20, "wrong-path store escaped"
