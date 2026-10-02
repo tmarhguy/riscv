@@ -134,8 +134,8 @@ lint: lint-verible lint-verilator
 
 lint-verible:
 	@echo "[LINT] Running Verible lint..."
-	@if command -v $(VERIBLE_LINT) \u003e/dev/null 2\u003e\u00261; then \
-		$(VERIBLE_LINT) $(VERIBLE_LINT_RULES) $(RTL_SRCS) || (echo "[LINT] Verible lint failed" \u0026\u0026 exit 1); \
+	@if command -v $(VERIBLE_LINT) >/dev/null 2>&1; then \
+		$(VERIBLE_LINT) $(VERIBLE_LINT_RULES) $(RTL_SRCS) || (echo "[LINT] Verible lint failed" && exit 1); \
 	else \
 		echo "[LINT] WARNING: Verible not found. Install from:"; \
 		echo "  https://github.com/chipsalliance/verible/releases"; \
@@ -145,8 +145,8 @@ lint-verible:
 
 lint-verilator:
 	@echo "[LINT] Running Verilator lint..."
-	@if command -v $(VERILATOR) \u003e/dev/null 2\u003e\u00261; then \
-		$(VERILATOR) $(VERILATOR_LINT_FLAGS) $(RTL_SRCS) || (echo "[LINT] Verilator lint failed" \u0026\u0026 exit 1); \
+	@if command -v $(VERILATOR) >/dev/null 2>&1; then \
+		$(VERILATOR) $(VERILATOR_LINT_FLAGS) $(RTL_SRCS) || (echo "[LINT] Verilator lint failed" && exit 1); \
 	else \
 		echo "[LINT] ERROR: Verilator not found. Install with:"; \
 		echo "  brew install verilator"; \
