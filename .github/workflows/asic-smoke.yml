@@ -21,7 +21,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Install Yosys
-        run: sudo apt-get update && sudo apt-get install -y yosys
+      # Ubuntu Yosys 0.33 cannot parse the package imports used by this RTL.
+      - uses: YosysHQ/setup-oss-cad-suite@0d9c798a9db910ff8ea5e3b6ba077a4e5847f352 # v3
+        with:
+          version: "2026-10-01"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tool version
+        run: yosys -V
       - name: Synth top
         run: make synth
