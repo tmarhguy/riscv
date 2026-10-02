@@ -193,12 +193,14 @@ package rv64xo3_pkg;
   } mem_width_e;
 
   //--------------------------------------------------------------------------
-  // Forwarding Mux Select
+  // Forwarding Mux Select (2-wide: identifies the producing slot)
   //--------------------------------------------------------------------------
-  typedef enum logic [1:0] {
-    FWD_NONE   = 2'b00,  // No forwarding, use regfile
-    FWD_EX_MEM = 2'b01,  // Forward from EX/MEM
-    FWD_MEM_WB = 2'b10   // Forward from MEM/WB
+  typedef enum logic [2:0] {
+    FWD_NONE = 3'b000,  // No forwarding, use regfile
+    FWD_EX_A = 3'b001,  // Forward from EX/MEM slot A (older)
+    FWD_EX_B = 3'b010,  // Forward from EX/MEM slot B (younger)
+    FWD_WB_A = 3'b011,  // Forward from MEM/WB slot A (older)
+    FWD_WB_B = 3'b100   // Forward from MEM/WB slot B (younger)
   } fwd_sel_e;
 
   //--------------------------------------------------------------------------
