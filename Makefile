@@ -1,7 +1,7 @@
 # riscv64xO3 RV64IMAC OoO Processor - Build System
 # Canonical entrypoint for all project operations
 
-.PHONY: all clean lint format sim unit cocotb compliance compliance-rv32 regress synth help
+.PHONY: all clean lint format sim unit cocotb compliance compliance-rv32 cpp-suite regress synth help
 .PHONY: sw docker-build docker-ci-build docker-shell waves check-docs docs docs-clean docs-open asic-feas
 
 # Configuration
@@ -216,7 +216,10 @@ compliance-rv32: sim
 #------------------------------------------------------------------------------
 # Full Regression
 #------------------------------------------------------------------------------
-regress: lint unit cocotb compliance
+cpp-suite: sim
+	@$(SIM) --suite all
+
+regress: lint unit cocotb compliance compliance-rv32 cpp-suite
 	@echo "=========================================="
 	@echo "[REGRESS] All regression tests PASSED"
 	@echo "=========================================="
