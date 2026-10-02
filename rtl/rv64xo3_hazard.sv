@@ -98,24 +98,19 @@ module rv64xo3_hazard (
     input logic [REG_ADDR_W-1:0] rs_addr,
     input logic                  rs_valid
   );
-    if (!rs_valid || rs_addr == 5'd0) begin
-      return FWD_NONE;
+    begin
+      fwd_sel = FWD_NONE;
+      if (rs_valid && rs_addr != 5'd0) begin
+        if (mem_b_valid_i && mem_b_reg_write_i && (mem_b_rd_addr_i == rs_addr))
+          fwd_sel = FWD_EX_B;
+        else if (mem_a_valid_i && mem_a_reg_write_i && (mem_a_rd_addr_i == rs_addr))
+          fwd_sel = FWD_EX_A;
+        else if (wb_b_valid_i && wb_b_reg_write_i && (wb_b_rd_addr_i == rs_addr))
+          fwd_sel = FWD_WB_B;
+        else if (wb_a_valid_i && wb_a_reg_write_i && (wb_a_rd_addr_i == rs_addr))
+          fwd_sel = FWD_WB_A;
+      end
     end
-    // MEM stage, younger slot first
-    if (mem_b_valid_i && mem_b_reg_write_i && (mem_b_rd_addr_i == rs_addr)) begin
-      return FWD_EX_B;
-    end
-    if (mem_a_valid_i && mem_a_reg_write_i && (mem_a_rd_addr_i == rs_addr)) begin
-      return FWD_EX_A;
-    end
-    // WB stage, younger slot first
-    if (wb_b_valid_i && wb_b_reg_write_i && (wb_b_rd_addr_i == rs_addr)) begin
-      return FWD_WB_B;
-    end
-    if (wb_a_valid_i && wb_a_reg_write_i && (wb_a_rd_addr_i == rs_addr)) begin
-      return FWD_WB_A;
-    end
-    return FWD_NONE;
   endfunction
 
   assign fwd_a_sel_a_o = fwd_sel(ex_a_rs1_addr_i, ex_a_valid_i);
