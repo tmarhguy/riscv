@@ -5,7 +5,7 @@ Smoke tests and integration tests for the RV64IM scalar pipeline
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles, Timer
+from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles, Timer
 import pytest
 
 
@@ -68,8 +68,22 @@ class WishboneMemory:
                 (self.mem[addr + 2] << 16) |
                 (self.mem[addr + 3] << 24))
 
+    def _read_dword(self, addr):
+        """Read a 64-bit doubleword (2-wide instruction fetch)."""
+        addr = addr & 0xFFFFFFF8  # Doubleword align
+        lo = self._read_word(addr)
+        hi = self._read_word(addr + 4)
+        return lo | (hi << 32)
+
     async def run(self):
-        """Memory model coroutine"""
+        """Memory model coroutine.
+
+        Samples the bus at the falling edge so the response (ack + data
+        for the CURRENT address) is stable well before the next rising
+        edge. Sampling at the rising edge instead answers one cycle late,
+        which a pipelined master (held stb, new address every cycle)
+        would consume as the wrong parcel.
+        """
         cyc = getattr(self.dut, f"{self.prefix}_cyc_o")
         stb = getattr(self.dut, f"{self.prefix}_stb_o")
         adr = getattr(self.dut, f"{self.prefix}_adr_o")
@@ -87,27 +101,26 @@ class WishboneMemory:
         dat_i.value = 0
 
         while True:
-            await RisingEdge(self.dut.clk_i)
+            await FallingEdge(self.dut.clk_i)
 
             if cyc.value and stb.value:
                 addr = int(adr.value) % self.size
 
                 if is_data and we.value:
-                    # Write operation
+                    # Write operation (up to 8 byte lanes for 64-bit stores)
                     data = int(dat_o.value)
                     sel_val = int(sel.value)
 
-                    if sel_val & 0x1:
-                        self.mem[addr] = data & 0xFF
-                    if sel_val & 0x2:
-                        self.mem[addr + 1] = (data >> 8) & 0xFF
-                    if sel_val & 0x4:
-                        self.mem[addr + 2] = (data >> 16) & 0xFF
-                    if sel_val & 0x8:
-                        self.mem[addr + 3] = (data >> 24) & 0xFF
+                    for i in range(8):
+                        if sel_val & (1 << i):
+                            self.mem[addr + i] = (data >> (i * 8)) & 0xFF
 
-                # Read operation (or write ack)
-                dat_i.value = self._read_word(addr)
+                # Read operation (or write ack): 64-bit parcels for
+                # instruction fetch, 32-bit otherwise.
+                if self.prefix == "iwb":
+                    dat_i.value = self._read_dword(addr)
+                else:
+                    dat_i.value = self._read_word(addr)
                 ack.value = 1
             else:
                 ack.value = 0
@@ -391,3 +404,49 @@ async def test_mul_throughput(dut):
     dut._log.info(f"8xMUL throughput completed in {done_at} cycles")
     # 4-cycle MULs would need 8*4 + fill here; single-cycle must beat it.
     assert done_at < 40, f"no 1/cycle throughput? took {done_at} cycles"
+
+
+@cocotb.test()
+async def test_dual_issue(dut):
+    """Phase 2: pair-friendly add tree retires at ~2 IPC.
+
+    16 independent addis feeding a pairwise add-reduction tree
+    (16+8+4+2+1 = 31 ALU insns, result 16). Every level is
+    pairwise-independent, so a 2-wide pipe issues ~2/cycle.
+    A 1-wide pipe needs 33+fill cycles just to issue; beating
+    the bound proves dual issue.
+    """
+    clock = Clock(dut.clk_i, 10, unit="ns")
+    cocotb.start_soon(clock.start())
+
+    prog = {}
+    addr = 0x00
+    for i in range(16):
+        prog[addr] = enc_i(1, 0, 0, 4 + i)    # addi x(4+i), x0, 1
+        addr += 4
+    for j in range(8):
+        prog[addr] = enc_r(0x00, 5 + 2 * j, 4 + 2 * j, 0x0, 20 + j)
+        addr += 4                             # add x(20+j) = pair sum (= 2)
+    for k in range(4):
+        prog[addr] = enc_r(0x00, 21 + 2 * k, 20 + 2 * k, 0x0, 28 + k)
+        addr += 4                             # add x(28+k) (= 4)
+    prog[addr] = enc_r(0x00, 29, 28, 0x0, 4); addr += 4   # x4 = 8
+    prog[addr] = enc_r(0x00, 31, 30, 0x0, 5); addr += 4   # x5 = 8
+    prog[addr] = enc_r(0x00, 5, 4, 0x0, 6); addr += 4      # x6 = 16
+    prog[addr] = enc_i(0x100, 0, 0, 20); addr += 4
+    prog[addr] = enc_s(0, 6, 20, 0x2); addr += 4  # sw -> TOHOST (= 16)
+    prog[addr] = 0x0000006F                       # jal x0, 0 (halt)
+
+    imem = WishboneMemory(dut, "iwb", init_data=prog)
+    dmem = WishboneMemory(dut, "dwb")
+
+    cocotb.start_soon(imem.run())
+    cocotb.start_soon(dmem.run())
+
+    await reset_dut(dut)
+
+    done_at = await run_until_store(dut, dmem, 16)
+    assert done_at is not None, "dual-issue test did not complete"
+    dut._log.info(f"31-ALU add tree completed in {done_at} cycles")
+    # 33 insns single-issue needs 33+fill; 2-wide must beat 32.
+    assert done_at < 32, f"no dual issue? took {done_at} cycles"
