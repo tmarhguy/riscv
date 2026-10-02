@@ -72,13 +72,13 @@ module rv64xo3_id (
     input logic [REG_ADDR_W-1:0] raddr
   );
     if (raddr == 5'd0) begin
-      return '0;
+      read_port = 64'd0;
     end else if (wb_b_wen_i && wb_b_addr_i == raddr) begin
-      return wb_b_data_i;
+      read_port = wb_b_data_i;
     end else if (wb_a_wen_i && wb_a_addr_i == raddr) begin
-      return wb_a_data_i;
+      read_port = wb_a_data_i;
     end else begin
-      return regfile[raddr];
+      read_port = regfile[raddr];
     end
   endfunction
 
