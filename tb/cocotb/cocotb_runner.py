@@ -44,6 +44,10 @@ FULL_RTL = [
 # name -> (rtl sources, toplevel, test dirs holding the test modules,
 #           test modules, optional testcase filter)
 CONFIGS = {
+    "bp": (
+        ["include/rv64xo3_pkg.sv", "rv64xo3_bp.sv"],
+        "rv64xo3_bp", [TB / "bp"], ["test_bp"], [],
+    ),
     "alu": (
         ["include/rv64xo3_pkg.sv", "rv64xo3_alu.sv"],
         "rv64xo3_alu",
@@ -179,3 +183,7 @@ def test_top():
     if exclude:
         print("sw/build/hello.vmem missing: skipping test_hello (build with bare-metal toolchain via `make -C sw`)")
     _run("top", exclude=exclude)
+
+
+def test_bp():
+    _run("bp")
