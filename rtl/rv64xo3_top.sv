@@ -134,11 +134,24 @@ module rv64xo3_top #(
   logic                                   load_use_hazard;
   logic                                   serialize_pair;
 
-  // Branch prediction (slot A; slot B defaults not-taken)
-  logic                                   pred_taken_if;
-  logic                        [XLEN-1:0] pred_target_if;
-  logic                                   pred_miss_a;
-  logic                                   pred_miss_b;
+  // Both slots query one predictor; the oldest taken slot steers fetch.
+  logic pred_taken_if;
+  logic [XLEN-1:0] pred_target_if;
+  logic pred_taken_slots [2];
+  logic [XLEN-1:0] pred_targets [2];
+  logic [7:0] pred_indexes [2];
+  logic [XLEN-1:0] pred_pcs [2];
+  logic [ILEN-1:0] pred_instrs [2];
+  logic pred_miss_a, pred_miss_b;
+  logic bp_use_a, bp_branch, bp_call, bp_return;
+  logic [7:0] bp_index;
+  logic [XLEN-1:0] bp_target, bp_link;
+  assign pred_pcs[0] = pc_if;
+  assign pred_pcs[1] = pc_if + 64'd4;
+  assign pred_instrs[0] = instr0_if;
+  assign pred_instrs[1] = instr1_if;
+  assign pred_taken_if = pred_taken_slots[0] || pred_taken_slots[1];
+  assign pred_target_if = pred_taken_slots[0] ? pred_targets[0] : pred_targets[1];
 
   // CSR signals
   /* verilator lint_off UNUSEDSIGNAL */
@@ -181,19 +194,17 @@ module rv64xo3_top #(
   );
 
   //--------------------------------------------------------------------------
-  // Branch Predictor (Bimodal, slot A; slot B defaults not-taken)
+  // Branch Predictor (gshare, BTB, resolved return-address stack)
   //--------------------------------------------------------------------------
   rv64xo3_bp u_bp (
-      .clk_i         (clk_i),
-      .rst_ni        (rst_ni),
-      .pc_i          (pc_if),
-      .instr_i       (instr0_if),
-      .instr_valid_i (pair_valid_if),
-      .update_en_i   (bp_update_en),
-      .update_pc_i   (bp_update_pc),
-      .update_taken_i(bp_update_taken),
-      .pred_taken_o  (pred_taken_if),
-      .pred_target_o (pred_target_if)
+      .clk_i(clk_i), .rst_ni(rst_ni),
+      .pc_i(pred_pcs), .instr_i(pred_instrs), .instr_valid_i(pair_valid_if),
+      .update_en_i(bp_update_en), .update_pc_i(bp_update_pc),
+      .update_index_i(bp_index), .update_branch_i(bp_branch),
+      .update_taken_i(bp_update_taken), .update_target_i(bp_target),
+      .update_call_i(bp_call), .update_return_i(bp_return), .update_link_i(bp_link),
+      .pred_taken_o(pred_taken_slots), .pred_target_o(pred_targets),
+      .pred_index_o(pred_indexes)
   );
 
   //--------------------------------------------------------------------------
@@ -215,6 +226,7 @@ module rv64xo3_top #(
         if_id_a.pc          <= if_id_b.pc;
         if_id_a.instr       <= if_id_b.instr;
         if_id_a.valid       <= if_id_b.valid;
+        if_id_a.pred_index  <= if_id_b.pred_index;
         if_id_a.pred_taken  <= if_id_b.pred_taken;
         if_id_a.pred_target <= if_id_b.pred_target;
         if_id_b <= '0;
@@ -222,13 +234,15 @@ module rv64xo3_top #(
         if_id_a.pc          <= pc_if;
         if_id_a.instr       <= instr0_if;
         if_id_a.valid       <= 1'b1;
-        if_id_a.pred_taken  <= pred_taken_if;
-        if_id_a.pred_target <= pred_target_if;
+        if_id_a.pred_index  <= pred_indexes[0];
+        if_id_a.pred_taken  <= pred_taken_slots[0];
+        if_id_a.pred_target <= pred_targets[0];
         if_id_b.pc          <= pc_if + 64'd4;
         if_id_b.instr       <= instr1_if;
-        if_id_b.valid       <= 1'b1;
-        if_id_b.pred_taken  <= 1'b0;
-        if_id_b.pred_target <= pc_if + 64'd8;
+        if_id_b.valid       <= !pred_taken_slots[0];
+        if_id_b.pred_index  <= pred_indexes[1];
+        if_id_b.pred_taken  <= pred_taken_slots[1];
+        if_id_b.pred_target <= pred_targets[1];
       end else begin
         if_id_a <= '0;
         if_id_b <= '0;
@@ -441,6 +455,7 @@ module rv64xo3_top #(
       id_ex_a.is_auipc <= is_auipc_a;
       id_ex_a.illegal_instr <= illegal_instr_a && if_id_a.valid;  // Only illegal if valid instr
       id_ex_a.valid <= if_id_a.valid && !load_use_hazard && !pc_redirect;
+      id_ex_a.pred_index <= if_id_a.pred_index;
       id_ex_a.pred_taken <= if_id_a.pred_taken;
       id_ex_a.pred_target <= if_id_a.pred_target;
       if (serialize_pair) begin
@@ -476,7 +491,8 @@ module rv64xo3_top #(
         id_ex_b.is_auipc <= is_auipc_b;
         id_ex_b.illegal_instr <= illegal_instr_b && if_id_b.valid;  // Only illegal if valid instr
         id_ex_b.valid <= if_id_b.valid && !load_use_hazard && !pc_redirect;
-        id_ex_b.pred_taken <= if_id_b.pred_taken;
+        id_ex_b.pred_index <= if_id_b.pred_index;
+      id_ex_b.pred_taken <= if_id_b.pred_taken;
         id_ex_b.pred_target <= if_id_b.pred_target;
       end
     end
@@ -567,10 +583,10 @@ module rv64xo3_top #(
   assign mem_trap_any = mem_exc_valid_a || mem_exc_valid_b;
   assign trap_ex_a = id_ex_a.valid &&
                     (id_ex_a.is_ecall || id_ex_a.is_ebreak || id_ex_a.illegal_instr ||
-                     (fetch_misaligned && redir_a));
+                     (fetch_misaligned && taken_a));
   assign trap_ex_b = id_ex_b.valid &&
                     (id_ex_b.is_ecall || id_ex_b.is_ebreak || id_ex_b.illegal_instr ||
-                     (fetch_misaligned && redir_b));
+                     (fetch_misaligned && !taken_a && taken_b));
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -754,17 +770,19 @@ module rv64xo3_top #(
                    (id_ex_b.is_jal || id_ex_b.is_jalr ||
                     (id_ex_b.is_branch && branch_taken_b));
 
-  // Mispredicts: slot A against the predictor, slot B against default NT.
-  assign pred_miss_a = id_ex_a.valid && id_ex_a.is_branch &&
-                       (branch_taken_a != id_ex_a.pred_taken ||
-                        (branch_taken_a && branch_target_a != id_ex_a.pred_target));
-  assign pred_miss_b = id_ex_b.valid && id_ex_b.is_branch && branch_taken_b;
-
-  // Redirect requests per slot (taken/miss), older slot wins.
-  assign redir_a        = taken_a || pred_miss_a;
-  assign redir_target_a = taken_a ? branch_target_a : (id_ex_a.pc + 64'd4);
-  assign redir_b        = taken_b || pred_miss_b;
-  assign redir_target_b = taken_b ? branch_target_b : (id_ex_b.pc + 64'd4);
+  // Redirect only on a direction or target mismatch, for either slot.
+  assign pred_miss_a = id_ex_a.valid &&
+      (id_ex_a.is_branch || id_ex_a.is_jal || id_ex_a.is_jalr) &&
+      ((taken_a != id_ex_a.pred_taken) ||
+       (taken_a && branch_target_a != id_ex_a.pred_target));
+  assign pred_miss_b = id_ex_b.valid &&
+      (id_ex_b.is_branch || id_ex_b.is_jal || id_ex_b.is_jalr) &&
+      ((taken_b != id_ex_b.pred_taken) ||
+       (taken_b && branch_target_b != id_ex_b.pred_target));
+  assign redir_a = pred_miss_a;
+  assign redir_b = pred_miss_b;
+  assign redir_target_a = taken_a ? branch_target_a : id_ex_a.pc + 64'd4;
+  assign redir_target_b = taken_b ? branch_target_b : id_ex_b.pc + 64'd4;
 
   // Slot B dies when anything older redirects or traps (B already
   // executed beside it in EX but is wrong-path). A redirect from B itself
@@ -966,9 +984,9 @@ module rv64xo3_top #(
   logic ctrl_redir;
   logic [XLEN-1:0] ctrl_target;
   logic [XLEN-1:0] ctrl_pc;
-  assign ctrl_redir  = redir_a || redir_b;
-  assign ctrl_target = redir_a ? redir_target_a : redir_target_b;
-  assign ctrl_pc     = redir_a ? id_ex_a.pc : id_ex_b.pc;
+  assign ctrl_redir  = taken_a || taken_b;
+  assign ctrl_target = taken_a ? branch_target_a : branch_target_b;
+  assign ctrl_pc     = taken_a ? id_ex_a.pc : id_ex_b.pc;
   logic fetch_misaligned;
   assign fetch_misaligned = ctrl_redir && (ctrl_target[1:0] != 2'b00);
 
@@ -987,12 +1005,28 @@ module rv64xo3_top #(
   assign trap_val = mem_exc_valid_a ? ex_mem_a.alu_result :
                     mem_exc_valid_b ? ex_mem_b.alu_result : '0;
 
-  // Branch predictor updates: slot A (older) wins ties; slot B updates
-  // only when it is really executing (not suppressed as wrong-path).
-  assign bp_update_en    = (id_ex_a.valid && id_ex_a.is_branch) ||
-                           ((id_ex_b.valid && id_ex_b.is_branch) && !other_side_redir);
-  assign bp_update_pc    = (id_ex_a.valid && id_ex_a.is_branch) ? id_ex_a.pc : id_ex_b.pc;
-  assign bp_update_taken = (id_ex_a.valid && id_ex_a.is_branch) ? branch_taken_a : branch_taken_b;
+  // Resolved updates: older control wins; held EX cannot train repeatedly.
+  assign bp_use_a = id_ex_a.valid &&
+      (id_ex_a.is_branch || id_ex_a.is_jal || id_ex_a.is_jalr);
+  assign bp_update_en = !ctrl.stall_mem && !trap_taken && !mret_taken &&
+      (bp_use_a || (id_ex_b.valid && !other_side_redir &&
+       (id_ex_b.is_branch || id_ex_b.is_jal || id_ex_b.is_jalr)));
+  assign bp_update_pc = bp_use_a ? id_ex_a.pc : id_ex_b.pc;
+  assign bp_index = bp_use_a ? id_ex_a.pred_index : id_ex_b.pred_index;
+  assign bp_branch = bp_use_a ? id_ex_a.is_branch : id_ex_b.is_branch;
+  assign bp_update_taken = bp_use_a ? taken_a : taken_b;
+  assign bp_target = bp_use_a ? branch_target_a : branch_target_b;
+  assign bp_link = bp_update_pc + 64'd4;
+  assign bp_call = bp_use_a ?
+      ((id_ex_a.is_jal || id_ex_a.is_jalr) &&
+       (id_ex_a.rd_addr == 5'd1 || id_ex_a.rd_addr == 5'd5)) :
+      ((id_ex_b.is_jal || id_ex_b.is_jalr) &&
+       (id_ex_b.rd_addr == 5'd1 || id_ex_b.rd_addr == 5'd5));
+  assign bp_return = bp_use_a ?
+      (id_ex_a.is_jalr && (id_ex_a.rs1_addr == 5'd1 || id_ex_a.rs1_addr == 5'd5) &&
+       id_ex_a.rs1_addr != id_ex_a.rd_addr) :
+      (id_ex_b.is_jalr && (id_ex_b.rs1_addr == 5'd1 || id_ex_b.rs1_addr == 5'd5) &&
+       id_ex_b.rs1_addr != id_ex_b.rd_addr);
 
   //--------------------------------------------------------------------------
   // Assertions (SVA)
