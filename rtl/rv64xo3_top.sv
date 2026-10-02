@@ -137,11 +137,11 @@ module rv64xo3_top #(
   // Both slots query one predictor; the oldest taken slot steers fetch.
   logic pred_taken_if;
   logic [XLEN-1:0] pred_target_if;
-  logic pred_taken_slots [2];
-  logic [XLEN-1:0] pred_targets [2];
-  logic [7:0] pred_indexes [2];
-  logic [XLEN-1:0] pred_pcs [2];
-  logic [ILEN-1:0] pred_instrs [2];
+  logic [1:0] pred_taken_slots;
+  logic [1:0][XLEN-1:0] pred_targets;
+  logic [1:0][7:0] pred_indexes;
+  logic [1:0][XLEN-1:0] pred_pcs;
+  logic [1:0][ILEN-1:0] pred_instrs;
   logic pred_miss_a, pred_miss_b;
   logic bp_use_a, bp_branch, bp_call, bp_return;
   logic [7:0] bp_index;
@@ -873,6 +873,13 @@ module rv64xo3_top #(
   end
 
   // Control signal generation
+  // Keep the fetch stall outside this combinational block. serialize_pair
+  // depends on ctrl.stall_id; assigning all ctrl fields together here made
+  // tools see a false bundle-level combinational cycle through stall_if.
+  assign ctrl.stall_if = fetch_stall || load_use_hazard || div_raw_stall ||
+                         div_struct_stall || div_issue || div_inject ||
+                         mem_stall || serialize_pair;
+
   always_comb begin
     // Stall conditions.
     // NOTE: load_use_hazard stalls EX as well as IF/ID. A load in EX must
@@ -888,7 +895,6 @@ module rv64xo3_top #(
     // (and MEM for structural/inject, so no instruction is duplicated or
     // lost while waiting). serialize_pair holds IF for its shift cycle
     // (ID shifts B into slot A instead of freezing).
-    ctrl.stall_if  = fetch_stall || load_use_hazard || div_raw_stall || div_struct_stall || div_issue || div_inject || mem_stall || serialize_pair;
     ctrl.stall_id  = load_use_hazard || div_raw_stall || div_struct_stall || div_issue || div_inject || mem_stall;
     ctrl.stall_ex  = load_use_hazard || div_raw_stall || div_struct_stall || div_inject || mem_stall;
     ctrl.stall_mem = div_struct_stall || div_inject || mem_stall;
