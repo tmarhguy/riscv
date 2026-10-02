@@ -32,7 +32,8 @@ all: yosys-synth report
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-# Yosys synthesis for generic FPGA
+# Yosys structural synthesis smoke (technology-independent; skips ABC mapping
+# so the single-cycle wide multiplier does not dominate CI runtime).
 yosys-synth: $(BUILD_DIR)
 	yosys -p "\
 		read_verilog -sv $(SRCS); \
@@ -45,7 +46,7 @@ yosys-synth: $(BUILD_DIR)
 		opt; \
 		techmap; \
 		opt; \
-		synth; \
+		synth -noabc; \
 		write_json $(BUILD_DIR)/$(DESIGN).json; \
 		stat" \
 		> $(BUILD_DIR)/yosys.log 2>&1
