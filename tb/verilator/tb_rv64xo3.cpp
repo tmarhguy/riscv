@@ -228,11 +228,8 @@ public:
                 uint32_t addr = dut->iwb_adr_o;
                 // Verilator might output 64-bit addresses, mask if needed
                 if (mem.in_range(addr)) {
-                    // Start of 64-bit fetch support
-                    // Since I-cache/Fetch is usually 32-bit for RV64IM (unless compressed)
-                    // we return 32-bit instruction or 64-bit?
-                    // riscv64xO3 instruction fetch is 32-bit (ILEN=32).
-                    dut->iwb_dat_i = mem.read_word(addr);
+                    // 2-wide fetch: full 64-bit parcel (two instructions).
+                    dut->iwb_dat_i = mem.read_double(addr);
                 } else {
                     dut->iwb_dat_i = 0;
                 }
