@@ -1,6 +1,6 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, ClockCycles
+from cocotb.triggers import RisingEdge, FallingEdge, ClockCycles
 
 def parse_vmem(filename):
     mem = {} # addr -> byte
@@ -43,13 +43,27 @@ class WishboneSoC:
         else: # ROM
             offset = addr
             mem = self.rom
-            
+
         b0 = mem.get(offset, 0)
         b1 = mem.get(offset+1, 0)
         b2 = mem.get(offset+2, 0)
         b3 = mem.get(offset+3, 0)
         word = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0
         return word
+
+    def read_dword(self, addr):
+        # Returns 64-bit parcel (two instructions) for 2-wide fetch
+        if addr >= 0x80000000: # RAM
+            offset = addr - 0x80000000
+            mem = self.ram
+        else: # ROM
+            offset = addr
+            mem = self.rom
+        lo = (mem.get(offset, 0) | (mem.get(offset+1, 0) << 8) |
+              (mem.get(offset+2, 0) << 16) | (mem.get(offset+3, 0) << 24))
+        hi = (mem.get(offset+4, 0) | (mem.get(offset+5, 0) << 8) |
+              (mem.get(offset+6, 0) << 16) | (mem.get(offset+7, 0) << 24))
+        return lo | (hi << 32)
 
     def write(self, addr, data, sel):
         if addr == 0x10000000: # UART base
@@ -68,10 +82,12 @@ class WishboneSoC:
             if sel & 8: mem[offset+3] = (data >> 24) & 0xFF
 
     async def run_dwb(self):
-        # Data bus slave
+        # Data bus slave. Samples at the falling edge so ack/data for the
+        # current address settle before the next rising edge (a pipelined
+        # master with held stb would otherwise see a stale response).
         self.dut.dwb_ack_i.value = 0
         while True:
-            await RisingEdge(self.dut.clk_i)
+            await FallingEdge(self.dut.clk_i)
             if self.dut.dwb_stb_o.value and self.dut.dwb_cyc_o.value:
                 addr = int(self.dut.dwb_adr_o.value)
                 if self.dut.dwb_we_o.value:
@@ -94,13 +110,14 @@ class WishboneSoC:
                 self.dut.dwb_ack_i.value = 0
                 
     async def run_iwb(self):
-        # Instruction bus slave (Read only from ROM usually)
+        # Instruction bus slave (64-bit parcels for 2-wide fetch).
+        # Falling-edge sampling: see run_dwb.
         self.dut.iwb_ack_i.value = 0
         while True:
-            await RisingEdge(self.dut.clk_i)
+            await FallingEdge(self.dut.clk_i)
             if self.dut.iwb_stb_o.value and self.dut.iwb_cyc_o.value:
                 addr = int(self.dut.iwb_adr_o.value)
-                rdata = self.read(addr)
+                rdata = self.read_dword(addr)
                 self.dut.iwb_dat_i.value = rdata
                 self.dut.iwb_ack_i.value = 1
             else:
