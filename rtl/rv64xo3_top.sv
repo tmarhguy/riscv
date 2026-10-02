@@ -138,20 +138,21 @@ module rv64xo3_top #(
   logic pred_taken_if;
   logic [XLEN-1:0] pred_target_if;
   logic [1:0] pred_taken_slots;
-  logic [1:0][XLEN-1:0] pred_targets;
-  logic [1:0][7:0] pred_indexes;
-  logic [1:0][XLEN-1:0] pred_pcs;
-  logic [1:0][ILEN-1:0] pred_instrs;
+  logic [2*XLEN-1:0] pred_targets;
+  logic [15:0] pred_indexes;
+  logic [2*XLEN-1:0] pred_pcs;
+  logic [2*ILEN-1:0] pred_instrs;
   logic pred_miss_a, pred_miss_b;
   logic bp_use_a, bp_branch, bp_call, bp_return;
   logic [7:0] bp_index;
   logic [XLEN-1:0] bp_target, bp_link;
-  assign pred_pcs[0] = pc_if;
-  assign pred_pcs[1] = pc_if + 64'd4;
-  assign pred_instrs[0] = instr0_if;
-  assign pred_instrs[1] = instr1_if;
+  assign pred_pcs[XLEN-1:0] = pc_if;
+  assign pred_pcs[2*XLEN-1:XLEN] = pc_if + 64'd4;
+  assign pred_instrs[ILEN-1:0] = instr0_if;
+  assign pred_instrs[2*ILEN-1:ILEN] = instr1_if;
   assign pred_taken_if = pred_taken_slots[0] || pred_taken_slots[1];
-  assign pred_target_if = pred_taken_slots[0] ? pred_targets[0] : pred_targets[1];
+  assign pred_target_if = pred_taken_slots[0] ? pred_targets[XLEN-1:0] :
+                          pred_targets[2*XLEN-1:XLEN];
 
   // CSR signals
   /* verilator lint_off UNUSEDSIGNAL */
@@ -234,15 +235,15 @@ module rv64xo3_top #(
         if_id_a.pc          <= pc_if;
         if_id_a.instr       <= instr0_if;
         if_id_a.valid       <= 1'b1;
-        if_id_a.pred_index  <= pred_indexes[0];
+        if_id_a.pred_index  <= pred_indexes[7:0];
         if_id_a.pred_taken  <= pred_taken_slots[0];
-        if_id_a.pred_target <= pred_targets[0];
+        if_id_a.pred_target <= pred_targets[XLEN-1:0];
         if_id_b.pc          <= pc_if + 64'd4;
         if_id_b.instr       <= instr1_if;
         if_id_b.valid       <= !pred_taken_slots[0];
-        if_id_b.pred_index  <= pred_indexes[1];
+        if_id_b.pred_index  <= pred_indexes[15:8];
         if_id_b.pred_taken  <= pred_taken_slots[1];
-        if_id_b.pred_target <= pred_targets[1];
+        if_id_b.pred_target <= pred_targets[2*XLEN-1:XLEN];
       end else begin
         if_id_a <= '0;
         if_id_b <= '0;
@@ -394,6 +395,7 @@ module rv64xo3_top #(
   logic pair_raw;
   logic pair_waw;
   logic pair_struct;
+  logic stall_id_condition;
   assign a_writes   = reg_write_a && (if_id_a.instr[11:7] != 5'd0);
   assign b_writes   = reg_write_b && (if_id_b.instr[11:7] != 5'd0);
   assign b_rs2_used = (!alu_src_b || mem_write_b || is_branch_b || is_muldiv_b);
@@ -411,8 +413,12 @@ module rv64xo3_top #(
                         // the write, so split them across cycles.
                         (is_csr_a && (is_mret_b || is_ecall_b || is_ebreak_b ||
                                       illegal_instr_b)));
+  assign stall_id_condition = load_use_hazard || div_raw_stall ||
+                              div_struct_stall || div_issue || div_inject ||
+                              mem_stall;
+  assign ctrl.stall_id = stall_id_condition;
   assign serialize_pair = if_id_b.valid && (pair_raw || pair_waw || pair_struct) &&
-                          !ctrl.stall_id && !pc_redirect;
+                          !stall_id_condition && !pc_redirect;
 
   //--------------------------------------------------------------------------
   // ID/EX Pipeline Register (pair; slot B bubbles on serialize)
@@ -874,7 +880,7 @@ module rv64xo3_top #(
 
   // Control signal generation
   // Keep the fetch stall outside this combinational block. serialize_pair
-  // depends on ctrl.stall_id; assigning all ctrl fields together here made
+  // uses the independent stall_id_condition; reading ctrl.stall_id here made
   // tools see a false bundle-level combinational cycle through stall_if.
   assign ctrl.stall_if = fetch_stall || load_use_hazard || div_raw_stall ||
                          div_struct_stall || div_issue || div_inject ||
@@ -895,7 +901,6 @@ module rv64xo3_top #(
     // (and MEM for structural/inject, so no instruction is duplicated or
     // lost while waiting). serialize_pair holds IF for its shift cycle
     // (ID shifts B into slot A instead of freezing).
-    ctrl.stall_id  = load_use_hazard || div_raw_stall || div_struct_stall || div_issue || div_inject || mem_stall;
     ctrl.stall_ex  = load_use_hazard || div_raw_stall || div_struct_stall || div_inject || mem_stall;
     ctrl.stall_mem = div_struct_stall || div_inject || mem_stall;
 
