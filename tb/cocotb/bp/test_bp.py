@@ -14,16 +14,14 @@ async def test_gshare_btb_ras(dut):
                    dut.update_taken_i, dut.update_target_i, dut.update_call_i,
                    dut.update_return_i, dut.update_link_i):
         signal.value = 0
-    dut.pc_i[0].value = 0x40
-    dut.pc_i[1].value = 0x44
-    dut.instr_i[0].value = 0x00000463  # beq x0,x0,+8
-    dut.instr_i[1].value = 0x00008067  # ret
+    dut.pc_i.value = (0x44 << 64) | 0x40
+    dut.instr_i.value = (0x00008067 << 32) | 0x00000463  # ret; beq +8
     await RisingEdge(dut.clk_i)
     await FallingEdge(dut.clk_i)
     dut.rst_ni.value = 1
     dut.instr_valid_i.value = 1
     await Timer(1, unit="ns")
-    index = int(dut.pred_index_o[0].value)
+    index = (int(dut.pred_index_o.value) & 0xff)
     assert index == 0x10
     assert int(dut.pred_taken_o[0].value) == 0
     assert int(dut.pred_taken_o[1].value) == 0
@@ -45,33 +43,33 @@ async def test_gshare_btb_ras(dut):
         await Timer(1, unit="ns")
 
     await update(0x40, branch=1)
-    assert int(dut.pred_index_o[0].value) == (0x10 ^ 1)
+    assert (int(dut.pred_index_o.value) & 0xff) == (0x10 ^ 1)
     # An update trains the saved fetch index, despite changed current history.
-    dut.pc_i[0].value = 0x44
+    dut.pc_i.value = (0x44 << 64) | 0x44
     await Timer(1, unit="ns")
-    assert int(dut.pred_index_o[0].value) == index
+    assert (int(dut.pred_index_o.value) & 0xff) == index
     assert int(dut.pred_taken_o[0].value) == 1
     await update(0x44, target=0x120)
     assert int(dut.pred_taken_o[1].value) == 1
-    assert int(dut.pred_target_o[1].value) == 0x120
+    assert (int(dut.pred_target_o.value) >> 64) == 0x120
     # Same BTB index, different tag must miss.
-    dut.pc_i[1].value = 0x444
+    dut.pc_i.value = (0x444 << 64) | 0x44
     await Timer(1, unit="ns")
     assert int(dut.pred_taken_o[1].value) == 0
-    dut.pc_i[1].value = 0x44
+    dut.pc_i.value = (0x44 << 64) | 0x44
     await update(0x80, call=1, link=0x84)
-    assert int(dut.pred_target_o[1].value) == 0x84
+    assert (int(dut.pred_target_o.value) >> 64) == 0x84
     await update(0x90, call=1, link=0x94)
-    assert int(dut.pred_target_o[1].value) == 0x94
+    assert (int(dut.pred_target_o.value) >> 64) == 0x94
     await update(0x44, ret=1)
-    assert int(dut.pred_target_o[1].value) == 0x84
+    assert (int(dut.pred_target_o.value) >> 64) == 0x84
     await update(0x44, ret=1, target=0x140)
-    assert int(dut.pred_target_o[1].value) == 0x140
+    assert (int(dut.pred_target_o.value) >> 64) == 0x140
     # Empty returns are harmless; overflowing calls keep the newest 16 links.
     await update(0x44, ret=1)
     for i in range(18):
         await update(0x80, call=1, link=0x200 + 4*i)
     for i in reversed(range(2, 18)):
-        assert int(dut.pred_target_o[1].value) == 0x200 + 4*i
+        assert (int(dut.pred_target_o.value) >> 64) == 0x200 + 4*i
         await update(0x44, ret=1)
-    assert int(dut.pred_target_o[1].value) == 0x90
+    assert (int(dut.pred_target_o.value) >> 64) == 0x90

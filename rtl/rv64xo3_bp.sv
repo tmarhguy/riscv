@@ -8,8 +8,8 @@ module rv64xo3_bp #(
 ) (
     input logic clk_i,
     input logic rst_ni,
-    input logic [1:0][XLEN-1:0] pc_i,
-    input logic [1:0][ILEN-1:0] instr_i,
+    input logic [2*XLEN-1:0] pc_i,
+    input logic [2*ILEN-1:0] instr_i,
     input logic instr_valid_i,
     input logic update_en_i,
     input logic [XLEN-1:0] update_pc_i,
@@ -21,8 +21,8 @@ module rv64xo3_bp #(
     input logic update_return_i,
     input logic [XLEN-1:0] update_link_i,
     output logic [1:0] pred_taken_o,
-    output logic [1:0][XLEN-1:0] pred_target_o,
-    output logic [1:0][BHT_ADDR_W-1:0] pred_index_o
+    output logic [2*XLEN-1:0] pred_target_o,
+    output logic [2*BHT_ADDR_W-1:0] pred_index_o
 );
   logic [1:0] bht [BHT_SIZE];
   logic [BHT_ADDR_W-1:0] history;
@@ -99,10 +99,12 @@ module rv64xo3_bp #(
 
   logic [PRED_W-1:0] prediction0, prediction1;
   always_comb begin
-    prediction0 = predict(pc_i[0], instr_i[0]);
-    prediction1 = predict(pc_i[1], instr_i[1]);
-    {pred_taken_o[0], pred_target_o[0], pred_index_o[0]} = prediction0;
-    {pred_taken_o[1], pred_target_o[1], pred_index_o[1]} = prediction1;
+    prediction0 = predict(pc_i[XLEN-1:0], instr_i[ILEN-1:0]);
+    prediction1 = predict(pc_i[2*XLEN-1:XLEN], instr_i[2*ILEN-1:ILEN]);
+    {pred_taken_o[0], pred_target_o[XLEN-1:0],
+     pred_index_o[BHT_ADDR_W-1:0]} = prediction0;
+    {pred_taken_o[1], pred_target_o[2*XLEN-1:XLEN],
+     pred_index_o[2*BHT_ADDR_W-1:BHT_ADDR_W]} = prediction1;
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
